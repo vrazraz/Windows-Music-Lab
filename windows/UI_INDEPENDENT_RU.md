@@ -8,7 +8,7 @@ Creator использовал собственный native two-voice ABC take.
 
 Source fixes: Inspect раньше падал на100ms WAV; теперь short STFT padding/явно unavailable framebuzz. Sub-LSB rounding в антифазе больше не считается click. DAW FFmpeg mono fallback раньше уменьшал уровень≈3dB; теперь mono copied into both channels с full gain. Direct CPU workers дали measured4.000s stereo48kPCM24 Remaster WAV/FLAC,−18.03LUFS/−14.84dBTP;10 actual DAW archives имеют свои stems/ABC MIDI/timed lyrics и waveform identity.
 
-Ни Writer mock, ни синтетические stems не доказывают AI quality или нейросетевое разделение. DAW apps не открывались, XSD import не проверялся; deess/432Hz/stem remix/limiter stress тоже вне проверенной области. SDXL не повторялся. Новые optional weights/deps находятся только в [пакете согласования](OPTIONAL_RUNTIME_APPROVAL_RU.md).
+Ни Writer mock, ни синтетические stems не доказывают AI quality или нейросетевое разделение. DAW apps не открывались, XSD import не проверялся; deess/432Hz/stem remix/limiter stress тоже вне проверенной области. SDXL затем снят пользователем из scope; его pending test отменён. Новые optional weights/deps находятся только в [пакете согласования](OPTIONAL_RUNTIME_APPROVAL_RU.md).
 
 Собственный scope `uiqa-aca129d0bafa`, два take и scoped notebook сохранены для воспроизводимости; пользовательские данные и Chrome profiles не удалялись. Собственные hidden headless Chrome profiles закрыты. Test Studio UUID `8cb90db053de400e8c000e825677db99`, supervisor/engine/Lab/mock stopped; порты41868/41871/41872 свободны.
 

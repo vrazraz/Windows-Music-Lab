@@ -75,12 +75,6 @@
       "status": "two new pure wheels; original model URL with pinned secondary metadata digest; restricted unpickling requires audit",
       "acceptance": "one 256x256 synthetic raster ->1024x1024 PNG, finite RGB/channels, log loader architecture/scale/VRAM; then optionally existing local frame if still in scope"
     },
-    "sdxl-adapter": {
-      "status": "optional_unresolved_excluded",
-      "networkQuotaBytes": 0,
-      "modelFiles": [],
-      "reason": "No original-author plain SDXL style LoRA with verified file/hash/license/compatibility finalized. Existing SDXL loader supports safetensors local LoRA; no LCM scheduler, so LCM/Lightning shortcut adapters excluded."
-    },
     "creator-adapter": {
       "status": "optional_unresolved_excluded",
       "networkQuotaBytes": 0,
@@ -827,15 +821,15 @@
       "status": "full source audit/local wheel hash pending"
     },
     {
-      "component": "SDXL and Creator adapters",
-      "kind": "optional files",
-      "status": "excluded unresolved",
-      "reservedNetworkBytes": 0
-    },
-    {
       "component": "SheetSage/UniverSR12GB",
       "kind": "hardware validation",
       "status": "not run; native peak unknown and audio gate currently blocked"
+    },
+    {
+      "component": "Creator adapters",
+      "kind": "optional files",
+      "status": "catalogue is not an obligation to download; external voice/style weights not selected",
+      "reservedNetworkBytes": 0
     }
   ],
   "excluded": [
@@ -994,5 +988,8 @@
     }
   ],
   "auditedBaseCheckpoint": "ff5c470271057e046179e13394e710f3a67a1e8c",
-  "headAdmission": "Audit base is historical context, not a required future HEAD equality. After the parent combined checkpoint, review current relevant source/lock hashes before execution. Never require an impossible circular commit hash."
+  "headAdmission": "Audit base is historical context, not a required future HEAD equality. After the parent combined checkpoint, review current relevant source/lock hashes before execution. Never require an impossible circular commit hash.",
+  "removedByUser": [
+    "SDXL integration, profile and pending image test"
+  ]
 }

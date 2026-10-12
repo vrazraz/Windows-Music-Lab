@@ -1,4 +1,4 @@
-# Approved validation subset: SDXL only; no kernels/spandrel/GGUF/Qwen/Krea.
+# Shared Artist runtime retained; SDXL removed from active scope. No kernels/spandrel/GGUF/Qwen/Krea weights installed.
 --index-url https://pypi.org/simple
 --extra-index-url https://download.pytorch.org/whl/cu128
 torch==2.11.0+cu128

@@ -10,8 +10,7 @@
 #   heresy/fetch-heresy.sh --artwork [--artwork-q8] [--yes]
 #                                      also the artwork's models (HERESY 1120, 1167), asked first with their size: the
 #                                      painter by the cards: Krea 2 Muse by Stable Yogi at Q4 (--artwork-q8: Q8 too) with
-#                                      Krea 2's text encoder, VAE and the content filter where a card has 16 GB, else SDXL
-#                                      (CyberRealistic XL v10); both from our models repo; the prompt writer (Qwen3-4B)
+#                                      Krea 2's text encoder, VAE and the content filter where a card has 16 GB, no image-generation fallback below that limit; the prompt writer (Qwen3-4B)
 #   heresy/fetch-heresy.sh --qwen 2512-q4|2512-q6|2.1[,…] [--yes]
 #                                      HERESY 1323: also the Artist's Qwen painters, each asked first with its size:
 #                                      Qwen-Image-2512 with Lightning (Apache-2.0; Q4_K_M from a 16 GB card, Q6_K from 24)
@@ -295,13 +294,7 @@ if [ -n "$LISTENER" ]; then
   fi
 fi
 
-# HERESY 1120: artwork for takes, only when asked for, and asked again with its size (HERESY 1291: from our models repo v2, at its pin). The painter is CyberRealistic
-# XL v10 (an SDXL finetune by Cyberdelia, CreativeML Open RAIL++-M), converted to diffusers fp16 and kept in our models
-# repo (its author publishes it on Civitai only); the prompt writer is Qwen3-4B-Instruct-2507 from Qwen itself.
-# HERESY 1167 (Viktor 05.10.2026, after the A/B on twelve instruments: «Muse - отличный файнтюн»; «Для карт ниже 24GB VRAM…
-# оставим SDXL»): where a card has 16 GB, Krea 2 Muse by Stable Yogi (the author's GGUF, Q4; Q8 when asked) with Krea 2's
-# text encoder, VAE and configs, all from our models repo (Krea 2 Community License: its LICENSE and NOTICE come along),
-# and the content filter the licence asks for (Falconsai/nsfw_image_detection, Apache-2.0); SDXL below, as before.
+# Optional Krea artwork downloads preserve their own source/licence prompts; no removed-model fallback.
 if [ $ARTWORK = 1 ]; then
   BIG=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | sort -n | tail -1); BIG=${BIG:-0}
   if [ "$BIG" -ge 16000 ] 2>/dev/null; then
@@ -333,35 +326,8 @@ if [ $ARTWORK = 1 ]; then
   fi
 fi
 if [ $ARTWORK = 1 ] && ! [ "${BIG:-0}" -ge 16000 ] 2>/dev/null; then
-  asked artwork "Artwork: the painter and the prompt writer (SDXL: no card here has the 16 GB Krea 2 wants)"
-  A_DIR="$ROOT/artwork/CyberRealistic-XL-v10"
-  a_here() { [ -s "$A_DIR/model_index.json" ] && [ -s "$A_DIR/unet/diffusion_pytorch_model.safetensors" ]; }
-  go=1
-  if [ $MODE != check ] && [ $YES = 0 ] && ! { a_here && [ -s "$ROOT/artwork/Qwen3-4B-Instruct-2507/config.json" ]; }; then
-    printf "%s" "Download 15 GB (the painter 6.9, the prompt writer 8.1)? It needs a 16 GB card when it draws. [y/N] "
-    read -r answer; case "$answer" in y|Y|yes|да|Да) ;; *) go=0; echo "${D}          not downloaded${X}" ;; esac
-  fi
-  if [ $go = 1 ]; then
-    if a_here; then say_here "$A_DIR" "(goldhub/Ruach_Studio_Models_v2)"
-    elif [ $MODE = check ]; then say_miss "$A_DIR" "(goldhub/Ruach_Studio_Models_v2)"
-    else
-      hf_ready >/dev/null || { say_fail "$A_DIR" "(the pinned downloader would not install: tools/hf-env.sh)"; }
-      again "$HF" download --quiet goldhub/Ruach_Studio_Models_v2 --revision "$(pin goldhub/Ruach_Studio_Models_v2)" --include "artwork/CyberRealistic-XL-v10/*" --local-dir "$ROOT"
-      if a_here; then say_got "$A_DIR" "(goldhub/Ruach_Studio_Models_v2)"; else say_fail "$A_DIR" "(goldhub/Ruach_Studio_Models_v2: $(why))"; fi
-    fi
-    # HERESY 1156 (Viktor: «на нашу модель дать рядом относительный симлинк SDXL-Artwork-Model, чтобы на этот симлинк
-    # можно было бы посадить другие веса SDXL»): the studio paints with whatever SDXL this link points at. Made once,
-    # beside ours; a link the user pointed elsewhere is left as it is, and said
-    A_LINK="$ROOT/artwork/SDXL-Artwork-Model"
-    if [ -L "$A_LINK" ] || [ -e "$A_LINK" ]; then
-      say_here "$A_LINK" "(→ $(readlink "$A_LINK" 2>/dev/null || echo "not a link"))"
-    elif [ $MODE = check ]; then
-      say_miss "$A_LINK" "(→ CyberRealistic-XL-v10: made by a run without --check)"
-    elif a_here; then
-      ln -s CyberRealistic-XL-v10 "$A_LINK" && say_got "$A_LINK" "(→ CyberRealistic-XL-v10, the painter; point it at another SDXL to change it)"
-    fi
-    hf_repo Qwen/Qwen3-4B-Instruct-2507 "$ROOT/artwork/Qwen3-4B-Instruct-2507" "${WORK[@]}" LICENSE
-  fi
+  asked artwork "Artwork generation unavailable: Krea/Qwen require their own local weights and enough VRAM"
+  echo "No image-generation model was downloaded; the removed painter is not a fallback."
 fi
 
 # HERESY 1323 (Viktor 10.10.2026: «Забирай 2512 тоже в Студию»; «как альтернативу для менее мощных карт бери смело … Q6_K +

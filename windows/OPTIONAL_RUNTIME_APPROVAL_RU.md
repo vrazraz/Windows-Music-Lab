@@ -12,9 +12,9 @@
 | Creator: ноты из записи | SheetSage2-Q8_0.gguf; существующий yue-server.exe /transcribe | Модель закреплена, CC BY-NC 4.0; native peak не измерен |
 | Аудио upscale | UniverSR 0.1.5, universr-audio | Нет опубликованного wheel версии; нужен полный source audit/local packaging; VRAM gate сейчас блокирует |
 | Изображение upscale | Spandrel 0.4.2 + einops 0.8.2; официальный RealESRGAN_x4plus | Два ART wheels, 386 449 байт; Windows inference ещё не проверен |
-| SDXL / Creator адаптеры | Конкретный файл не выбран | Два необязательных unresolved slots, **0 байт квоты**, excluded |
+| Creator адаптеры | Поддержка загрузки сохранена; файлы не выбирались | Каталог LoRA не означает обязанность скачивать чужие голоса; **0 байт квоты** |
 
-Trainer BF16 требует 20 000 МиБ; Krea Q4/Q8 — 12 500/18 500; стандартные Qwen — 15 500–22 500. Они исключены. MERT custom Python/обучение, paid Civitai, случайные LoRA, LCM/Lightning shortcuts и streamed Qwen сюда не входят. SDXL worker не реализует LCM sampler; популярность адаптера не доказывает совместимость. Existing Writer/Listener/Whisper/SDXL повторно не скачиваются.
+Trainer BF16 требует 20 000 МиБ; Krea Q4/Q8 — 12 500/18 500; стандартные Qwen — 15 500–22 500. Они исключены. MERT custom Python/обучение, paid Civitai, случайные LoRA, LCM/Lightning shortcuts и streamed Qwen сюда не входят. SDXL worker не реализует LCM sampler; популярность адаптера не доказывает совместимость. Existing Writer/Listener/Whisper повторно не скачиваются. SDXL снят пользователем из scope; его файлы только сохранены.
 
 ## Закреплённые модели
 

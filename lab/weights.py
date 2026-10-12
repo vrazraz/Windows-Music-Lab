@@ -88,11 +88,8 @@ ARTWORK_BIG = {"name": "artwork", "label": "Artwork",
                    {"id": "q8", "label": "Krea 2 Muse Q4 and Q8", "size": "41 GB", "note": "less when some of it is here",
                     "files": [MUSE.format("Q4"), MUSE.format("Q8")] + KREA}]}
 ARTWORK_SMALL = {"name": "artwork", "label": "Artwork",
-                 "what": "the Artist's painter (no card here has the 16 GB Krea 2 wants): SDXL CyberRealistic, and the prompt writer (Qwen3-4B)",
-                 "variants": [
-                     {"id": "sdxl", "label": "SDXL CyberRealistic", "size": "15 GB", "note": "a 16 GB card when it draws",
-                      "files": ["artwork/CyberRealistic-XL-v10/model_index.json", "artwork/CyberRealistic-XL-v10/unet/diffusion_pytorch_model.safetensors",
-                                "artwork/Qwen3-4B-Instruct-2507/model.safetensors.index.json"]}]}
+                 "what": "Optional Krea/Qwen generation needs local weights and enough VRAM; existing artwork and Artist tools remain available.",
+                 "variants": []}
 
 LINE = re.compile(r"^(here|differs|missing|fetched|unknown|failed)\s+(.*)$")
 SUM = re.compile(r"^here (\d+) · unknown (\d+) · differs (\d+) · fetched (\d+) · missing (\d+) · failed (\d+)$")
@@ -233,10 +230,10 @@ def _args(body):
         if v is None:
             continue
         v = str(v)
-        ids = [x["id"] for x in (e or ARTWORK_BIG)["variants"]] + ([] if e else ["sdxl"])
+        ids = [x["id"] for x in (e or ARTWORK_BIG)["variants"]]
         if v not in ids:
             raise ValueError(f"{name} takes {', '.join(ids)}")
-        x = (e or ARTWORK_BIG)["variants"] + ([] if e else ARTWORK_SMALL["variants"])
+        x = (e or ARTWORK_BIG)["variants"]
         label = (e or ARTWORK_BIG)["label"]
         what = "the " + label[0].lower() + label[1:] + " " + next((y.get("label") or y["id"] for y in x if y["id"] == v), v)
         if name == "artwork":
@@ -262,7 +259,7 @@ def _which(body):
         if body.get(name) is None:
             continue
         v = str(body[name])
-        x = (e or ARTWORK_BIG)["variants"] + ([] if e else ARTWORK_SMALL["variants"])
+        x = (e or ARTWORK_BIG)["variants"]
         return {"extra": name, "variant": v}, _bytes(next((y["size"] for y in x if y["id"] == v), ""))
     return {}, None
 

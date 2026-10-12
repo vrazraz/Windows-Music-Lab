@@ -15,7 +15,7 @@
 torch==2.11.0+cu128
 torchvision==0.26.0+cu128
 transformers>=5.2,<6          # Krea 2's text encoder and tokenizer (Qwen3-VL), the prompter (Qwen3-4B), the content filter
-diffusers>=0.41               # Krea2Pipeline, the GGUF loader; SDXL as before; QwenImage21Pipeline (HERESY 1313)
+diffusers>=0.41               # Krea2Pipeline, the GGUF loader; QwenImage21Pipeline (HERESY 1313)
 accelerate
 gguf>=0.10                    # the fine-tune's GGUF
 safetensors

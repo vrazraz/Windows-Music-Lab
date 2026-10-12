@@ -37,7 +37,9 @@ if(-not $StdlibOnly){
     if(-not(Test-Path -LiteralPath $readyPath)){throw 'Isolated ML installation is not yet verified. Wait for ready.json or use explicit -StdlibOnly.'}
     $ready=Get-Content -LiteralPath $readyPath -Raw | ConvertFrom-Json
     if($ready.schemaVersion -ne 1 -or $ready.completed -ne $true){throw 'Isolated ML runtime completion marker is invalid.'}
-    foreach($profile in @('core','art')){
+    $profiles=@('core')
+    if(Test-Path -LiteralPath (Join-Path $root '.venv-art\Scripts\python.exe')){$profiles+=@('art')}
+    foreach($profile in $profiles){
         $r=$ready.profiles.$profile
         $expected=if($profile -eq 'core'){'.venv/Scripts/python.exe'}else{'.venv-art/Scripts/python.exe'}
         if($r.importChecksPassed -ne $true -or $r.cudaBuild -notlike '*+cu128*' -or $r.pythonRelativePath.Replace('\','/') -ne $expected){throw "Unverified runtime profile: $profile"}

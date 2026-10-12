@@ -358,10 +358,7 @@ def gpus_state():
 
 
 def machine_state():
-    """HERESY 1304 (Viktor 10.10.2026: «при самом старте новой Студии сканирование устройств и выбор оптимальных настроек для YuE2
-    BF16/кванта и для модели генерации обложек»): the cards with their compute capability, limits and BF16 tensor cores, the
-    studio's card, and the painter that fits here: Krea 2 Muse Q4 first (12.6 GB at its peak, lighter than SDXL's 14.2 and
-    better), SDXL where only it is downloaded; none when no card has the room ({"error"} when the cards cannot be read)."""
+    """Read machine limits and suggest only an installed, supported painter that fits."""
     try:
         cards = machine.cards()
     except RuntimeError as e:
@@ -373,10 +370,9 @@ def machine_state():
         c["limit_mb"] = lim.get(c["index"])
         c["bf16_cores"] = machine.has_bf16_cores(c["compute"])
     room = max((min(c["total_mb"], c["limit_mb"] or 10 ** 9) for c in cards), default=0)
-    ready = {"krea2-q4": krea_ready("krea2-q4"), "krea2-q8": krea_ready("krea2-q8"),
-             "sdxl": (KIT / "artwork/CyberRealistic-XL-v10/model_index.json").is_file()}
-    fits = [p for p in ("krea2-q4", "sdxl", "krea2-q8") if ART_NEED[p] <= room]
-    best = next((p for p in ("krea2-q4", "sdxl") if p in fits and ready[p]), "") or ("krea2-q4" if "krea2-q4" in fits else "")
+    ready = {p: (artist.qwen_ready(p) if p.startswith("qwen") else krea_ready(p)) for p in ART_NEED}
+    fits = [p for p in ART_NEED if ART_NEED[p] <= room]
+    best = next((p for p in fits if ready[p]), "")
     return {"cards": cards, "studio": now if now is not None else roles.get("studio", 0), "room_mb": room,
             "painter": {"suggest": best, "ready": ready, "fits": fits, "need_mb": ART_NEED}}
 
@@ -1205,18 +1201,8 @@ def chain_async(name, spec):
     return dict(job, name=name)
 
 
-# HERESY 1120: artwork for a take (art_job.py, Viktor 02.10.2026: «просто иконка в плеере, в карточке и в mp3»): a
-# small language model writes a picture prompt from the take's style and words, an SDXL finetune draws it. One at a
-# time with the other heavy jobs, on a card the guard gives (the two models one after the other; measured 02.10.2026:
-# 14.2 GB reserved at the peak, SDXL at 1024 px and its decoder).
-ART_NEED_MB = 15000
-# HERESY 1167 (Viktor 05.10.2026, the A/B: «Muse - отличный файнтюн»; «Для карт ниже 24GB VRAM… оставим SDXL»; «Изначальным
-# выставь Q4»): the painters, each its room on a card at the peak with the prompter before it (RTX 3090, 05.10.2026: Krea 2
-# Muse Q4 11.6 GB, Q8 17.4 GB; SDXL 14.2 GB) and its Python (Krea paints in .venv-art: transformers 5, diffusers 0.40)
-ART_NEED = {"krea2-q4": 15000, "krea2-q8": 21000, "sdxl": ART_NEED_MB}   # with a margin over the peaks
-# HERESY 1297: measured again on GPU2 10.10.2026, the prompter (Qwen3-4B) before the painter, at 1024 px: Krea 2 Muse Q4 12.6 GB
-# (42 s), SDXL 14.2 GB (17 s); Q8 17.4 GB (05.10). A margin of about half a gigabyte: a 16 GB card (15 GB left by a desktop) takes Q4
-ART_NEED = {"krea2-q4": 13500, "krea2-q8": 18500, "sdxl": 15000}
+# Artwork keeps its existing Krea/Qwen backends. No removed painter is a fallback.
+ART_NEED = {"krea2-q4": 13500, "krea2-q8": 18500}
 ART_PY = Path(os.environ.get("LAB_ART_PY", runtime.venv_python(KIT, artist=True)))
 MUSE_FILES = {"krea2-q4": "museByStableYogi_v35Q4Extended.gguf", "krea2-q8": "museByStableYogi_v35Q8Extended.gguf"}
 
@@ -1241,30 +1227,28 @@ def art_here(asked):
         if not artist.qwen_ready(k) or (model not in artist.qwen_models() if k == "qwen2512-fp8" else bool(model)):
             return ""
         return k + (":" + model if model else "")
-    return k if not model and (k == "sdxl" or krea_ready(k)) else ""
+    return k if not model and krea_ready(k) else ""
 
 
 def art_painter(asked=None):
-    """HERESY 1167: the painter for an artwork: the one asked for, else the user's setting (yue2.artPainter), else by the
-    cards: Krea 2 Muse at Q4 where one has 16 GB, SDXL below; Krea only where its files and environment are. HERESY 1338: a Qwen
-    painter as well (a fine-tune as «qwen2512-fp8:FILE»); one whose files are not here gives way to the cards' choice."""
-    p = art_here(asked)
-    if not p:
-        try:
-            p = art_here(runtime.read_json(KIT / "user/settings.json").get("keys", {}).get("yue2.artPainter"))
-        except (OSError, ValueError, AttributeError):
-            p = ""
-    if p:
-        return p
-    if p not in ART_NEED:
-        cards = training.gpus()
-        big = max((c.get("total_mb", 0) for c in cards), default=0) if isinstance(cards, list) else 0
-        # HERESY 1297: Krea 2 Muse Q4 needs less than SDXL (12.6 GB to 14.2 at their peaks): it is the painter wherever a card has
-        # 16 GB; below, neither fits yet, and art_async says so
-        p = "krea2-q4" if big >= 15000 else "sdxl"
-    if p != "sdxl" and not krea_ready(p):
-        p = "sdxl"
-    return p
+    """Use an explicit installed painter, saved supported choice, or installed fit; never download."""
+    requested = str(asked or "").strip()
+    if requested.lower().partition(":")[0] == "sdxl":
+        raise ValueError("SDXL was removed by the user; its retained files are inactive")
+    if requested:
+        chosen = art_here(requested)
+        if not chosen:
+            raise ValueError("The selected Krea/Qwen painter is not installed locally")
+        return chosen
+    try:
+        saved = art_here(runtime.read_json(KIT / "user/settings.json").get("keys", {}).get("yue2.artPainter"))
+    except (OSError, ValueError, AttributeError):
+        saved = ""
+    if saved:
+        return saved
+    cards = training.gpus()
+    room = max((c.get("total_mb", 0) for c in cards), default=0) if isinstance(cards, list) else 0
+    return next((p for p in ART_NEED if ART_NEED[p] <= room and art_here(p)), "")
 
 
 def art_info(name):
@@ -1386,8 +1370,8 @@ def art_refusal(painter, table=None, where="choose it in Engine → Artwork"):
     need = table[painter]
     if room >= need:
         return ""
-    fits = [p for p in ("krea2-q4", "sdxl") if p != painter and p in table and table[p] <= room and (p == "sdxl" or krea_ready(p))]
-    names = {"krea2-q4": "Krea 2 Muse Q4", "krea2-q8": "Krea 2 Muse Q8", "sdxl": "SDXL", "qwen2512-q4": "Qwen-Image 2512 Q4",   # 1338
+    fits = [p for p in table if p != painter and table[p] <= room and art_here(p)]
+    names = {"krea2-q4": "Krea 2 Muse Q4", "krea2-q8": "Krea 2 Muse Q8", "qwen2512-q4": "Qwen-Image 2512 Q4",   # 1338
              "qwen2512-q6": "Qwen-Image 2512 Q6", "qwen2512-fp8": "Qwen-Image 2512 fp8", "qwen21": "Qwen-Image 2.1"}
     return (f"{names.get(painter, painter)} needs about {need / 1024:.1f} GB of VRAM (its peak with a margin), and the biggest card here "
             f"has {room / 1024:.1f} GB" + (" under its limit (Engine → GPUs)" if lim else "") + ": " +
@@ -1399,6 +1383,10 @@ def art_async(name, again=False, seed=None, painter=None):
     d = take_dir(name)
     key = f"art:{name}"
     painter = art_painter(painter)                   # HERESY 1167; 1338: a fine-tune of Qwen as «qwen2512-fp8:FILE»
+    if not painter:
+        if not again and (d / "artwork.jpg").is_file():
+            return art_info(name)
+        raise ValueError("No installed Krea/Qwen painter fits this machine; gallery, uploaded artwork and other Artist tools remain available")
     need = ART_NEED[painter.partition(":")[0]]
     live = jobs.get(key)                             # HERESY 1297: refused at once, and only asked for a new job
     refuse = "" if live and live.get("status") in ("queued", "running") else art_refusal(painter.partition(":")[0])
@@ -1438,7 +1426,7 @@ def art_async(name, again=False, seed=None, painter=None):
                     env = dict(os.environ, CUDA_VISIBLE_DEVICES=str(gpu), CUDA_DEVICE_ORDER="PCI_BUS_ID", ART_PAINTER=painter.partition(":")[0],
                                ART_MODEL=painter.partition(":")[2])   # HERESY 1338
                     tmp = d / "artwork.part.jpg"
-                    py = ART_PY if painter != "sdxl" else LAB_PY
+                    py = ART_PY
                     p = native_run([str(py), str(HERE / "art_job.py"), str(d), str(tmp), str(seed if seed is not None else "")],
                                        env=env, capture_output=True, text=True, timeout=1200)
                     if p.returncode != 0:
@@ -1502,7 +1490,7 @@ def api_ctx():
                        "gloss": gloss_async, "derived": derived_list}}
 
 
-# HERESY 1157 (Viktor 03.10.2026: «SDXL рисовалка не идёт в системный лог. Перепроверь логирование всех GPU активностей»;
+# Artwork GPU activity remains logged for supported painters.
 # «Зелёную точку в баре анимируй всегда, когда идёт GPU активность в студии, и тултипом при наведении running jobs
 # status»): every job of the lab and every training run, as it waits, starts, ends or fails, in a log of its own the page
 # merges into its Server log (the engine's log is the engine's stderr: the lab's work never reached it), and what runs

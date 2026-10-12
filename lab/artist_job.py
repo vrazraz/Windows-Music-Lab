@@ -292,16 +292,15 @@ def load_loras(pipe, loras, ckpt):
 
 
 def main():
+    asked = (os.environ.get("ART_PAINTER") or "").strip().lower()
+    if asked == "sdxl":
+        raise ValueError("SDXL has been removed from Artist; choose an available Krea or Qwen painter")
     configure_runtime(art_job.KIT, artist=True)
     run = Path(sys.argv[1])
     ask = json.loads(Path(run / "ask.json").read_text(encoding="utf-8"))
-    asked = (os.environ.get("ART_PAINTER") or "").strip().lower()
     if asked == "upscale":                           # HERESY 1322: a picture made larger by an upscaler (its ask has no prompt)
         import artist_upscale
         return artist_upscale.main(run, ask)
-    if asked == "sdxl":
-        import artist_sdxl
-        return artist_sdxl.main(run, ask)
     prompt, seed, count = str(ask["prompt"]), int(ask["seed"]), max(1, min(4, int(ask.get("count") or 1)))
     preview = bool(ask.get("preview"))
     shapes = [s for s in ask.get("shapes") or ["1:1"] if s in SHAPES]

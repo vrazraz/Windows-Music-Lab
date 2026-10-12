@@ -41,7 +41,6 @@ NEED = {"krea2-q8": 18500, "krea2-q4": 12500}
 QWEN = {"qwen2512-q4": ("Qwen-Image 2512 · Q4", 15500), "qwen2512-q6": ("Qwen-Image 2512 · Q6", 20000),
         "qwen2512-fp8": ("Qwen-Image 2512 · fp8", 22500), "qwen21": ("Qwen-Image 2.1 · research licence", 21000)}
 NEED.update({k: v[1] for k, v in QWEN.items()})
-NEED["sdxl"] = 8000                                   # CPU-offloaded SDXL; real Windows peak requires model validation
 NEED["upscale"] = 4000                                # HERESY 1322: a DAT 4x model peaked at 2.1 GB in tiles of 512 (RTX 3090)
 # HERESY 1342: the card a run needs when its painter's blocks stream from RAM (artist_qwen.place), asked when no card here takes it whole
 STREAM_NEED = {"qwen2512-fp8": 6000}   # measured 10.10.2026: 2.3 GB at the peak with every block streamed (1328², Lightning, four adapters)
@@ -147,15 +146,6 @@ def _model_weights_ready(component):
     return any(p.is_file() and p.stat().st_size > 0 for p in d.glob("*.safetensors"))
 
 
-def sdxl_ready():
-    import art_job
-    try:
-        p = art_job.sdxl_path()
-        if p.suffix == ".safetensors":
-            return p.is_file() and p.stat().st_size > 0 and (art_job.OURS / "model_index.json").is_file()
-        return (p / "model_index.json").is_file() and all(_model_weights_ready(p / name) for name in ("text_encoder", "text_encoder_2", "unet", "vae"))
-    except (OSError, RuntimeError):
-        return False
 
 
 def qwen_ready(painter):
@@ -178,16 +168,6 @@ def painters():
             "ready": krea and _art("Krea-2-Muse", "museByStableYogi_v35Q4Extended.gguf").is_file()},
            {"key": "krea2-q8", "label": "Krea 2 Muse · Q8", "need_mb": NEED["krea2-q8"], "family": "krea2",
             "ready": krea and _art("Krea-2-Muse", "museByStableYogi_v35Q8Extended.gguf").is_file()}]
-    import artist_sdxl
-    out.append({"key": "sdxl", "label": "SDXL (local, CPU offload)", "need_mb": NEED["sdxl"], "family": "sdxl",
-                "ready": sdxl_ready(), "samplers": ["euler", "euler-sde", "dpmpp", "heun"], "schedules": ["simple", "karras"],
-                "defaults": artist_sdxl.defaults(), "step_limits": [10, 60],
-                "resolution_choices": [512, 1024], "default_resolution": 1024,
-                "production_offload_mode": "component", "validation_memory_guard": artist_sdxl.validation_policy(),
-                "resolutions_by_size": {"512": {"1:1": [512, 512], "16:9": [672, 384], "9:16": [384, 672]}},
-                "differential_mask": False, "resolutions": {"1:1": [1024, 1024], "16:9": [1344, 768], "9:16": [768, 1344]},
-                "runtime_validation": "pending",
-                "note": "Local SDXL with CPU offload and tiled VAE; 8 GB is the requested GPU budget, its Windows peak is not measured yet. Karras uses dpmpp. Differential diffusion uses Krea/Qwen."})
     for k, (label, need) in QWEN.items():
         e = {"key": k, "label": label, "need_mb": need, "family": "qwen-image-2.1" if k == "qwen21" else "qwen-image-2512",
              "ready": qwen_ready(k), "note": QWEN_NOTE.get(k, ""), "differential_mask": k != "qwen21"}
@@ -196,6 +176,18 @@ def painters():
         if k != "qwen21":
             e["lightning"] = _art("Qwen-Image-2512", "lightning", "Qwen-Image-2512-Lightning-8steps-V1.0-bf16.safetensors").exists()
         out.append(e)
+    for entry in out:
+        reason = "Local model files are missing" if not entry["ready"] else ""
+        if entry["ready"] and H.get("refusal"):
+            reason = H["refusal"](entry["key"], NEED, "choose it as the painter here") or ""
+            if reason and entry["key"] in STREAM_NEED:
+                streamed = dict(NEED, **{entry["key"]: STREAM_NEED[entry["key"]]})
+                if not H["refusal"](entry["key"], streamed, ""):
+                    reason = ""
+                    entry["streaming"] = True
+                    entry["effective_need_mb"] = STREAM_NEED[entry["key"]]
+        entry["viable"] = bool(entry["ready"] and not reason)
+        entry["unavailable_reason"] = reason
     return {"painters": out, "execution": {"local_only": local_only(), "gpu_mutex": os.environ.get("RUACH_GPU_MUTEX", ""),
                                            "gpu_handoff": bool(H.get("gpu_handoff"))}}
 
@@ -227,19 +219,15 @@ def sampling(painter, s):
         if not lo <= n <= hi:
             raise ValueError(f"steps: {lo} to {hi} for this painter" + (" with Lightning" if painter.startswith("qwen2512") and fast else ""))
         out["steps"] = n
-    allowed_samplers = ("euler", "euler-sde", "dpmpp", "heun") if painter == "sdxl" else SAMPLERS
-    allowed_schedules = ("simple", "karras") if painter == "sdxl" else SCHEDULES
     if s.get("sampler"):
-        if s["sampler"] not in allowed_samplers:
-            raise ValueError("the sampler: one of " + ", ".join(allowed_samplers))
+        if s["sampler"] not in SAMPLERS:
+            raise ValueError("the sampler: one of " + ", ".join(SAMPLERS))
         out["sampler"] = s["sampler"]
     if s.get("schedule"):
-        if s["schedule"] not in allowed_schedules:
-            raise ValueError("the schedule: one of " + ", ".join(allowed_schedules))
+        if s["schedule"] not in SCHEDULES:
+            raise ValueError("the schedule: one of " + ", ".join(SCHEDULES))
         out["schedule"] = s["schedule"]
-    if painter == "sdxl" and out.get("schedule") == "karras" and out.get("sampler", "dpmpp") != "dpmpp":
-        raise ValueError("SDXL Karras schedule uses dpmpp")
-    if (painter == "sdxl" or painter.startswith("qwen2512") and not fast) and s.get("cfg") is not None:
+    if (painter.startswith("qwen2512") and not fast) and s.get("cfg") is not None:
         c = float(s["cfg"])
         if not 1 <= c <= 10:
             raise ValueError("guidance: 1 to 10")
@@ -253,6 +241,13 @@ RUNS_MAX = 2       # HERESY 1340 (Viktor 10.10.2026: «разреши батчи
 
 def draw(body):
     """A run, asked for and queued; its thread waits for a card and draws it."""
+    asked = str(body.get("painter") or "").strip().lower()
+    if asked == "sdxl":
+        raise ValueError("SDXL has been removed from Artist; choose an available Krea or Qwen painter")
+    if asked == "__unavailable__":
+        raise ValueError("No local Artist painter is available")
+    if "resolution" in body or "validation_profile" in body:
+        raise ValueError("Artist uses its painter's native sizes; custom resolution and validation profiles are unavailable")
     _worker_python()
     with H["lock"]:
         going = [k for k in H["jobs"] if k.startswith("artist:")]
@@ -275,12 +270,7 @@ def draw(body):
     seed = body.get("seed")
     seed = int(seed) if re.fullmatch(r"\d{1,10}", str(seed if seed is not None else "").strip()) else random.randint(0, 2**31 - 1)
     seed = min(seed, 2**31 - 1 - count)
-    asked = str(body.get("painter") or "").strip().lower()
-    painter = asked if asked in QWEN or asked == "sdxl" else H["painter"](body.get("painter"))   # HERESY 1318: a Qwen painter by its own name
-    if painter == "sdxl" and not sdxl_ready():
-        raise ValueError("SDXL is not ready: approved local model files go into artwork/, selected in SDXL-Artwork-Model.json")
-    if painter == "sdxl" and (body.get("mask_opts") or {}).get("soft"):
-        raise ValueError("SDXL supports feathered inpaint masks; differential diffusion uses Krea/Qwen")
+    painter = asked if asked in QWEN else H["painter"](body.get("painter"))   # HERESY 1318: a Qwen painter by its own name
     if painter in QWEN and not qwen_ready(painter):
         raise ValueError(QWEN[painter][0] + " is not on this machine: its files go into artwork/" + ("Qwen-Image-2.1" if painter == "qwen21" else "Qwen-Image-2512") + "/ (heresy/fetch-heresy.sh)")
     model = ""
@@ -309,21 +299,10 @@ def draw(body):
             H["take_dir"](take)
         except (FileNotFoundError, ValueError):
             take = None
-    resolution = None
-    if painter == "sdxl":
-        import artist_sdxl
-        resolution = artist_sdxl.resolution_of(body)
-        artist_sdxl.validate_profile(body)
-    elif "resolution" in body:
-        raise ValueError("The resolution selector is supported by SDXL only")
     rid = time.strftime("%Y%m%d-%H%M%S-") + os.urandom(2).hex()
     d = home() / rid
     d.mkdir(parents=True)
     ask = {"prompt": prompt, "shapes": shapes, "seed": seed, "count": count, "preview": body.get("preview") is not False}
-    if resolution is not None:
-        ask["resolution"] = resolution
-        if body.get("validation_profile"):
-            ask["validation_profile"] = body["validation_profile"]
     if loras:
         ask["loras"] = loras                             # HERESY 1316
     if model:

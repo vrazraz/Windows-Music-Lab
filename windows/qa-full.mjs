@@ -13,7 +13,7 @@ const target = tabs.find(t => t.type === "page" && t.url === "about:blank");
 if (!target) throw new Error("The isolated blank test page was not found.");
 const socket = new WebSocket(target.webSocketDebuggerUrl);
 await new Promise((resolve,reject) => { socket.addEventListener("open",resolve,{once:true}); socket.addEventListener("error",reject,{once:true}); });
-const exceptions=[],requests=[],failures=[];
+const exceptions=[],requests=[],failures=[],blockedHeavy=[];
 let sequence=0;
 const pending = new Map();
 socket.addEventListener("message",event => {
@@ -21,6 +21,12 @@ socket.addEventListener("message",event => {
   if(message.method==='Runtime.exceptionThrown') exceptions.push(message.params.exceptionDetails);
   if(message.method==='Network.requestWillBeSent') requests.push({url:message.params.request.url,method:message.params.request.method});
   if(message.method==='Network.loadingFailed') failures.push(message.params);
+  if(message.method==='Fetch.requestPaused'){
+    const r=message.params.request,u=new URL(r.url);
+    const heavy=/^\/lab\/art\/draw$/.test(u.pathname)||(r.method==='POST'&&(/^\/(synth|transcribe)(\/|$)|^\/lab\/(artist\/(run|draw|upscale)|art$|train\/(start|listen)|stems|upscale|chain|gloss)/.test(u.pathname)));
+    if(heavy)blockedHeavy.push({url:r.url,method:r.method});
+    send(heavy?'Fetch.failRequest':'Fetch.continueRequest',heavy?{requestId:message.params.requestId,errorReason:'BlockedByClient'}:{requestId:message.params.requestId}).catch(()=>{});
+  }
   if(handler) { pending.delete(message.id); clearTimeout(handler.timer); message.error ? handler.reject(new Error(JSON.stringify(message.error))) : handler.resolve(message.result); }
 });
 function send(method,params={}) {
@@ -37,6 +43,8 @@ async function evaluate(expression) {
 }
 try {
   await send("Page.enable"); await send("Runtime.enable"); await send("Network.enable");
+  await send("Fetch.enable",{patterns:[{urlPattern:"*",requestStage:"Request"}]});
+  if(process.argv.includes("--sdxl-removed"))await send("Page.addScriptToEvaluateOnNewDocument",{source:"try{localStorage.setItem('yue2.arPainter','sdxl');localStorage.setItem('yue2.artPainter','sdxl');}catch(e){}"});
   await send("Emulation.setDeviceMetricsOverride",{width:1920,height:1080,deviceScaleFactor:1,mobile:false});
   await send("Page.navigate",{url:appUrl});
   let ready=false;
@@ -65,16 +73,18 @@ try {
     throw new Error('Automatic local Writer UI readiness failed: '+JSON.stringify(writer));
   }
   const expectsArtist = process.argv.includes('--artist-ready');
-  const artist=await evaluate("({painter:document.getElementById('arPainter')?.value,options:[...document.getElementById('arPainter').options].map(o=>({value:o.value,label:o.text,disabled:o.disabled})),resolution:document.getElementById('arResolution')?.value,sampling:document.getElementById('arSampSay')?.textContent})");
-  if(expectsArtist && (artist.painter!=='sdxl' || !artist.options.some(o=>o.value==='sdxl' && !o.disabled))){
-    throw new Error('Installed SDXL selection is not ready: '+JSON.stringify(artist));
-  }
+  const artist=await evaluate("({painter:document.getElementById('arPainter')?.value,options:[...document.getElementById('arPainter').options].map(o=>({value:o.value,label:o.text,disabled:o.disabled})),drawDisabled:document.getElementById('arDraw')?.disabled,sampling:document.getElementById('arSampSay')?.textContent})");
+  if (artist.options.some(o=>o.value==='sdxl')) throw new Error('Removed painter is still offered');
+  if(expectsArtist && !artist.options.some(o=>o.value===artist.painter && !o.disabled)) throw new Error('Requested installed painter is not ready');
+  const removalExpected=process.argv.includes('--sdxl-removed');
+  const engineArtist=await evaluate("({value:document.getElementById('artPainter').value,options:[...document.getElementById('artPainter').options].map(o=>({value:o.value,text:o.text,disabled:o.disabled}))})");
+  if(removalExpected&&(artist.painter!=='__unavailable__'||artist.drawDisabled!==true||!artist.options.length||engineArtist.options.some(o=>o.value==='sdxl')||engineArtist.value==='sdxl'||blockedHeavy.length))throw new Error('Removed scope or unavailable Artist state failed: '+JSON.stringify({artist,engineArtist,blockedHeavy}));
   const cloud=await evaluate("({providers:[...document.querySelectorAll('option')].filter(x=>/openrouter|cloud/i.test(x.value)).map(x=>({value:x.value,disabled:x.disabled,hidden:x.hidden})),boot:document.getElementById('bootSplash')?.textContent})");
   const external=requests.filter(x=>/^https?:/.test(x.url)&&!['127.0.0.1','localhost','[::1]'].includes(new URL(x.url).hostname));
   // The installed antivirus injects its own browser script; do not change its protection.
   const injected=external.filter(x=>new URL(x.url).hostname==='gc.kis.v2.scr.kaspersky-labs.com');
   const appExternal=external.filter(x=>!injected.includes(x));
-  const result={passed:exceptions.length===0&&appExternal.length===0,tabs,writer,expectsWriter,artist,expectsArtist,cloud,exceptions,externalRequests:external,applicationExternalRequests:appExternal,antivirusInjectedRequests:injected,requests,failures,url:appUrl,checkedAt:new Date().toISOString(),inferenceJobs:0};
+  const result={passed:exceptions.length===0&&appExternal.length===0&&blockedHeavy.length===0,removalExpected,engineArtist,blockedHeavy,tabs,writer,expectsWriter,artist,expectsArtist,cloud,exceptions,externalRequests:external,applicationExternalRequests:appExternal,antivirusInjectedRequests:injected,requests,failures,url:appUrl,checkedAt:new Date().toISOString(),inferenceJobs:0};
   await writeFile(join(output,'full-ui-check.json'),JSON.stringify(result,null,2));
   console.log(JSON.stringify({passed:result.passed,tabs:tabs.length,exceptions:exceptions.length,applicationExternalRequests:appExternal.length,antivirusInjectedRequests:injected.length,failures:failures.length}));
   if(!result.passed)throw new Error('UI runtime exception or external request; see full-ui-check.json');

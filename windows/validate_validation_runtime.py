@@ -11,8 +11,6 @@ modules={'core':['torch','torchaudio','numpy','scipy','soundfile','faster_whispe
          'art':['torch','torchvision','numpy','scipy','PIL','diffusers','transformers','accelerate','peft','safetensors']}
 for module in modules[args.profile]:
     importlib.import_module(module)
-if args.profile=='art':
-    from diffusers import StableDiffusionXLPipeline
 import torch
 assert torch.__version__=='2.11.0+cu128' and torch.version.cuda=='12.8','Expected official CUDA wheel build'
 snapshot=cache/f'installed-{args.profile}.json'

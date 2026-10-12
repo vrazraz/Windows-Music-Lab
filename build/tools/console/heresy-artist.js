@@ -12,12 +12,13 @@
     { id: "16:9", label: "16:9 · 1920×1080", say: "a video", w: 16, h: 9, s: 47 },
     { id: "9:16", label: "9:16 · 1080×1920", say: "a short", w: 9, h: 16, s: 47 }
   ];
-  var PAINTERS = { "krea2-q4": "Krea 2 Muse · Q4", "sdxl": "SDXL (local, CPU offload)", "krea2-q8": "Krea 2 Muse · Q8" };
+  var PAINTERS = { "krea2-q4": "Krea 2 Muse · Q4", "krea2-q8": "Krea 2 Muse · Q8", "qwen2512-q4": "Qwen-Image 2512 · Q4", "qwen2512-q6": "Qwen-Image 2512 · Q6", "qwen2512-fp8": "Qwen-Image 2512 · fp8", "qwen21": "Qwen-Image 2.1" };
+  var UNAVAILABLE_PAINTER = "__unavailable__";
   var PAINTER_INFO = {};                                 // HERESY 1318: the lab's word on each painter (need, family, note, models)
   // HERESY 1334: the Artist's own log (the dock's Artist view), what it is asked and what comes of it
   function alog(text, kind) { if (window.RuachArtistLog) window.RuachArtistLog.add(text, kind); }
   function painterLabel(r) {                            // HERESY 1322: an upscaler's run says so, with its factor
-    return r.kind === "upscale" ? tr("Upscale") + " " + (r.target ? String(r.target).toUpperCase() : "\u00d7" + r.factor) : PAINTERS[r.painter] || r.painter || "";
+    return r.kind === "upscale" ? tr("Upscale") + " " + (r.target ? String(r.target).toUpperCase() : "\u00d7" + r.factor) : PAINTERS[r.painter] || (r.painter ? r.painter + " (" + tr("retained history") + ")" : "");
   }
   var KEY = { prompt: "yue2.arPrompt", shapes: "yue2.arShapes", count: "yue2.arCount", seed: "yue2.arSeed", painter: "yue2.arPainter",
     live: "yue2.arLive", look: "yue2.arLook", filter: "yue2.arFilter", size: "yue2.arSize" };
@@ -34,7 +35,7 @@
   }
   var SIZES = [["s", "S", 130], ["m", "M", 200], ["l", "L", 300]];
   var state = { hooks: null, runs: [], take: null, timer: 0, sending: false, open: {}, view: null, first: true,
-    look: "runs", filter: "all", size: "m" };
+    look: "runs", filter: "all", size: "m", noPainters: true, unavailableReason: "Checking local Artist models" };
 
   function $(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
@@ -74,7 +75,7 @@
     var pk = $("arPainter").value, ps = sampNow(pk);   // HERESY 1319: the time follows the steps
     if (/^krea2/.test(pk)) secs = 25 + (secs - 25) * (+ps.steps || 8) / 8 * sampLooks(ps);   // HERESY 1333: and its looks a step
     if (/^qwen/.test(pk)) secs = 90 + n * (pk === "qwen21" ? 3 * (+ps.steps || 30) : 3.5 * (+ps.steps || 8) * (sampFast(pk, ps) ? 1 : 2) * sampLooks(ps));   // HERESY 1318: its parts; 1328: the switch; 1333: its looks first, then each picture
-    $("arCost").textContent = pk === "sdxl" && n ? tr((n === 1 ? "1 picture" : n + " pictures") + " · local inference; time depends on hardware") : n ? tr((n === 1 ? "1 picture" : n + " pictures") + " · " + minutes(secs) + " on one card") : tr("pick a shape");   // HERESY 1339: one sentence
+    $("arCost").textContent = state.noPainters ? tr("Drawing unavailable") + ": " + tr(state.unavailableReason) : n ? tr((n === 1 ? "1 picture" : n + " pictures") + " · " + minutes(secs) + " on one card") : tr("pick a shape");   // HERESY 1339: one sentence
     // HERESY 1340 (Viktor: «разреши батчинг/очередь до двух батчей»): Draw draws while a run goes, the second run waiting behind it,
     // two at a time; Stop is a button of its own (1270's: the drawing run, else the waiting one)
     var busy = drawingRun(), full = runsFull();
@@ -83,7 +84,7 @@
       : busy ? tr("Draw these too: the run waits behind the one going now (two runs at a time; Ctrl+Enter)")
       : tr("Draw the pictures picked: every shape, every variation (Ctrl+Enter)");   // HERESY 1332: a tip of its own, not an empty one
     $("arDraw").disabled = full || !n || !$("arPrompt").value.trim() || state.sending || state.noPainters;
-    if (state.noPainters) $("arDraw").dataset.tip = tr("Install approved local Artist models first");
+    if (state.noPainters) $("arDraw").dataset.tip = tr(state.unavailableReason);
     $("arStop").hidden = !busy;
     $("arStop").disabled = !!state.stopping;
     $("arStop").dataset.tip = tr("Stop the run: a waiting one leaves the queue, a drawing one ends now; the pictures it finished stay");
@@ -91,14 +92,12 @@
   }
   // HERESY 1319: the sampling per painter (kept in this browser), its limits by the painter; only what differs from the painter's own is sent
   KEY.sampling = "yue2.arSampling";
-  KEY.resolution = "yue2.arResolution";
   // HERESY 1328: Lightning is a switch (lightOn) and a strength (lightning, kept while it is off); a fine-tune paints without it by
   // default (30 steps, guidance 4), a GGUF one with it; a painter whose Lightning file is not here has no switch at all
   function lightHere(key) { var p = PAINTER_INFO[key] || {}; return /^qwen2512/.test(key) && p.lightning !== false; }
   function sampDefaults(key) {
     var profile = PAINTER_INFO[key] || {};
     if (profile.defaults) return Object.assign({}, profile.defaults);
-    if (key === "sdxl") return { steps: 28, cfg: 5.5, sampler: "dpmpp", schedule: "simple" };
     var fine = key === "qwen2512-fp8";
     if (/^qwen2512/.test(key)) {
       var on = !fine && lightHere(key);
@@ -109,12 +108,11 @@
   }
   function sampAll() { try { var a = JSON.parse(recall(KEY.sampling) || "{}"); return a && typeof a === "object" ? a : {}; } catch (e) { return {}; } }
   function sampLim(key, s) { return (PAINTER_INFO[key] || {}).step_limits || (sampFast(key, s) ? [4, 16] : [10, 60]); }
-  var SAMPLER_NAMES = { euler: "Euler", "euler-sde": "Euler SDE", er_sde: "ER-SDE", res_2s: "RES 2s", res_2s_ode: "RES 2s ODE", res_3s: "RES 3s", res_3s_ode: "RES 3s ODE", heunpp2: "Heun++ 2", exp_heun_2_x0: "Exp Heun 2 x0", exp_heun_2_x0_sde: "Exp Heun 2 x0 SDE", dpmpp: "DPM++", heun: "Heun" };
+  var SAMPLER_NAMES = { euler: "Euler", "euler-sde": "Euler SDE", er_sde: "ER-SDE", res_2s: "RES 2s", res_2s_ode: "RES 2s ODE", res_3s: "RES 3s", res_3s_ode: "RES 3s ODE", heunpp2: "Heun++ 2", exp_heun_2_x0: "Exp Heun 2 x0", exp_heun_2_x0_sde: "Exp Heun 2 x0 SDE" };
   var SCHEDULE_NAMES = { simple: "Simple", karras: "Karras", exponential: "Exponential", beta: "Beta", beta57: "Beta 57", kl_optimal: "KL optimal", sgm_uniform: "SGM uniform", bong_tangent: "Bong tangent" };
   function sampleChoices(key, type, value) {
-    var p = PAINTER_INFO[key] || {}, defaults = type === "samplers" ? Object.keys(SAMPLER_NAMES).filter(function (v) { return v !== "dpmpp" && v !== "heun"; }) : Object.keys(SCHEDULE_NAMES);
-    var values = (p[type] || (key === "sdxl" ? (type === "samplers" ? ["euler", "euler-sde", "dpmpp", "heun"] : ["simple", "karras"]) : defaults)).slice();
-    if (key === "sdxl" && type === "schedules" && (value || {}).sampler !== "dpmpp") values = values.filter(function (v) { return v !== "karras"; });
+    var p = PAINTER_INFO[key] || {}, defaults = type === "samplers" ? Object.keys(SAMPLER_NAMES) : Object.keys(SCHEDULE_NAMES);
+    var values = (p[type] || defaults).slice();
     return values;
   }
   function paintSampleMenu(id, values, names) {
@@ -132,7 +130,6 @@
     if (samples.indexOf(s.sampler) < 0) s.sampler = sampDefaults(key).sampler;
     schedules = sampleChoices(key, "schedules", s);
     if (schedules.indexOf(s.schedule) < 0) s.schedule = "simple";
-    if (key === "sdxl") s.cfg = Math.max(1, Math.min(10, +s.cfg || 5.5));
     var lim = sampLim(key, s);
     s.steps = Math.max(lim[0], Math.min(lim[1], Math.round(+s.steps) || lim[0]));   // within the range it is sent in
     return s;
@@ -142,11 +139,11 @@
   function sampLooks(s) { return LOOKS[(s || {}).sampler] || 1; }
   function sampFast(key, s) { return /^krea2/.test(key) || (/^qwen2512/.test(key) && !!s.lightOn && +s.lightning > 0); }
   function sampSay(key, s) {
-    var q = /^qwen2512/.test(key), names = { dpmpp: "DPM++", heun: "Heun", euler: "Euler", "euler-sde": "Euler SDE", simple: "Simple", karras: "Karras", exponential: "Exponential", beta: "Beta",
+    var q = /^qwen2512/.test(key), names = { euler: "Euler", "euler-sde": "Euler SDE", simple: "Simple", karras: "Karras", exponential: "Exponential", beta: "Beta",
       er_sde: "ER-SDE", res_2s: "RES 2s", res_2s_ode: "RES 2s ODE", res_3s: "RES 3s", res_3s_ode: "RES 3s ODE", heunpp2: "Heun++ 2", exp_heun_2_x0: "Exp Heun 2 x0",
       exp_heun_2_x0_sde: "Exp Heun 2 x0 SDE", beta57: "Beta 57", kl_optimal: "KL optimal", sgm_uniform: "SGM uniform", bong_tangent: "Bong tangent" };   // HERESY 1333
     return tr(s.steps + " steps · " + names[s.sampler || "euler"] + " · " + names[s.schedule || "simple"] +   // HERESY 1339: one sentence («8 шагов»)
-      (key === "sdxl" ? " · guidance " + (s.cfg || 5.5) : q ? (sampFast(key, s) ? " · Lightning " + (+s.lightning).toFixed(2) : " · guidance " + (s.cfg || 4)) : ""));
+      (q ? (sampFast(key, s) ? " · Lightning " + (+s.lightning).toFixed(2) : " · guidance " + (s.cfg || 4)) : ""));
   }
   function paintSampling() {
     var key = $("arPainter").value, s = sampNow(key), lim = sampLim(key, s), q = /^qwen2512/.test(key), fast = sampFast(key, s);
@@ -154,8 +151,7 @@
     paintSampleMenu("arSampler", sampleChoices(key, "samplers", s), SAMPLER_NAMES);
     paintSampleMenu("arSchedule", sampleChoices(key, "schedules", s), SCHEDULE_NAMES);
     $("arSampler").value = s.sampler || "euler"; $("arSchedule").value = s.schedule || "simple";
-    $("arLightBox").hidden = !(q && lightHere(key)); $("arCfgBox").hidden = !(key === "sdxl" || q && !fast);
-    if (key === "sdxl") $("arCfg").value = String(s.cfg || 5.5);
+    $("arLightBox").hidden = !(q && lightHere(key)); $("arCfgBox").hidden = !(q && !fast);
     if (q) { $("arLightOn").checked = !!s.lightOn; $("arLight").value = (+s.lightning).toFixed(2); $("arLight").disabled = !s.lightOn; $("arCfg").value = String(s.cfg || 4); }
     $("arSampSay").textContent = sampSay(key, s);
     // HERESY 1333: what the sampling matrix showed (10.10.2026, 30 pictures): Lightning under Karras or Exponential paints the subject twice;
@@ -173,13 +169,11 @@
       s.lightning = Math.max(0.05, Math.min(1.5, +(+$("arLight").value).toFixed(2) || was.lightning));
       s.cfg = Math.max(1, Math.min(10, +$("arCfg").value || 4));
     }
-    if (key === "sdxl") s.cfg = Math.max(1, Math.min(10, +$("arCfg").value || 5.5));
     if (q && sampFast(key, s) !== sampFast(key, was)) s.steps = sampFast(key, s) ? (key === "qwen2512-fp8" ? 12 : 8) : 30;   // Lightning on or off: steps in its range
     var samples = sampleChoices(key, "samplers", s), schedules;
     if (samples.indexOf(s.sampler) < 0) s.sampler = sampDefaults(key).sampler;
     schedules = sampleChoices(key, "schedules", s);
     if (schedules.indexOf(s.schedule) < 0) s.schedule = "simple";
-    if (key === "sdxl") s.cfg = Math.max(1, Math.min(10, +s.cfg || 5.5));
     var lim = sampLim(key, s);
     s.steps = Math.max(lim[0], Math.min(lim[1], Math.round(s.steps) || lim[0]));
     all[key] = s;
@@ -193,32 +187,52 @@
     if (/^qwen2512/.test(key)) {
       if (sampFast(key, s)) delete out.cfg;
       if (Object.keys(out).length || !!s.lightOn !== !!d.lightOn || (s.lightOn && +s.lightning !== +d.lightning)) out.lightning = sampFast(key, s) ? +s.lightning : 0;   // the steps' range is Lightning's
-    } else if (key !== "sdxl") delete out.cfg;
+    } else delete out.cfg;
     return out;
   }
   // HERESY 1318: the painters as the lab has them; the fp8 fine-tune; the painter's note
+  function unavailablePainter(reason) {
+    var sel = $("arPainter");
+    state.noPainters = true;
+    state.unavailableReason = reason;
+    sel.innerHTML = '<option value="' + UNAVAILABLE_PAINTER + '" selected>' + esc(tr("Local Artist painter unavailable")) + '</option>';
+    sel.value = UNAVAILABLE_PAINTER;
+    sel.disabled = true;
+    paintPainter();
+  }
   function loadPainters() {
     return api("/artist/painters").then(function (d) {
-      var sel = $("arPainter"), was = recall(KEY.painter) || sel.value || "krea2-q4", list = (d.painters || []).filter(function (p) { return p.ready; });
-      // HERESY 1323: the painters not here yet (an fp8 fine-tune is the user's own file, not a fetch), said under the choice
-      state.notHere = (d.painters || []).filter(function (p) { return !p.ready && p.key !== "qwen2512-fp8"; }).map(function (p) { return p.label; });
+      var sel = $("arPainter"), was = recall(KEY.painter) || sel.value || "krea2-q4";
+      var known = (d.painters || []).filter(function (p) { return Object.prototype.hasOwnProperty.call(PAINTERS, p.key); });
+      var list = known.filter(function (p) { return p.ready && p.viable !== false; });
+      state.notHere = known.filter(function (p) { return !p.ready && p.key !== "qwen2512-fp8"; }).map(function (p) { return p.label; });
       PAINTER_INFO = {};
-      (d.painters || []).forEach(function (p) { PAINTERS[p.key] = p.label; PAINTER_INFO[p.key] = p; if (p.family) FAMILY[p.key] = p.family; });
-      state.noPainters = !list.length;
-      if (!list.length) { sel.innerHTML = '<option value="">' + esc(tr("No local Artist model")) + '</option>'; sel.value = ""; paintPainter(); return; }
+      known.forEach(function (p) { PAINTERS[p.key] = p.label; PAINTER_INFO[p.key] = p; if (p.family) FAMILY[p.key] = p.family; });
+      if (!list.length) {
+        var reasons = known.filter(function (p) { return p.ready && p.unavailable_reason; }).map(function (p) { return p.label + ": " + p.unavailable_reason; });
+        unavailablePainter(reasons.length ? reasons.join("; ") : "No installed Krea or Qwen painter is available; local model files and a compatible GPU are required");
+        return;
+      }
+      state.noPainters = false;
+      state.unavailableReason = "";
+      sel.disabled = false;
       sel.innerHTML = list.map(function (p) {
-        return '<option value="' + esc(p.key) + '">' + esc(p.label + " (" + tr("from " + (p.need_mb / 1000).toFixed(1).replace(".0", "") + " GB") + ")") + "</option>";
+        return '<option value="' + esc(p.key) + '">' + esc(p.label + " (" + tr("from " + ((p.effective_need_mb || p.need_mb) / 1000).toFixed(1).replace(".0", "") + " GB") + ")") + "</option>";
       }).join("");
       sel.value = list.some(function (p) { return p.key === was; }) ? was : list[0].key;
       paintPainter();
-    }).catch(function () { paintPainter(); });
+    }).catch(function () {
+      PAINTER_INFO = {};
+      unavailablePainter("Local Artist model availability could not be checked; drawing is unavailable");
+    });
   }
   function paintPainter() {
     paintArtistHeading();
     var p = PAINTER_INFO[$("arPainter").value] || {}, box = $("arModelBox"), note = $("arPainterNote");
     if (box) {
       var models = p.models || [];
-      box.hidden = !models.length;
+      box.hidden = state.noPainters || !models.length;
+      box.style.display = box.hidden ? "none" : "";  // .field display can override the native hidden attribute
       if (models.length) {
         var want = recall("yue2.arModel"), cur = $("arModel").value || want;
         $("arModel").innerHTML = models.map(function (m) { return '<option value="' + esc(m) + '">' + esc(m.replace(/\.safetensors$/, "")) + "</option>"; }).join("");
@@ -227,33 +241,19 @@
     }
     if (note) {
       var more = (state.notHere || []).length ? tr("More painters come from Engine → Models and LoRAs: " + state.notHere.join(", ")) : "";   // HERESY 1323; 1339: one sentence
-      note.hidden = !p.note && !more;
-      note.textContent = p.note ? tr(p.note) : more;
+      note.hidden = !state.noPainters && !p.note && !more;
+      note.textContent = state.noPainters ? tr(state.unavailableReason) : p.note ? tr(p.note) : more;
       note.dataset.tip = note.textContent;              // HERESY 1345: an i, its words in its tip
       note.classList.toggle("is-warn", p.key === "qwen21");
     }
-    paintResolution(p);
     paintLoras();
     paintMaskProfile();
     paintShapeTips(p);
     paintSampling();                                     // HERESY 1319
     paintForm();
+    if (state.runs.length) paintRunsList();
   }
-  function resolutionNow() { var control = $("arResolution"); return control && control.value === "512" ? 512 : 1024; }
-  function paintResolution(profile) {
-    var control = $("arResolution"), box = $("arResolutionBox");
-    if (!control) {
-      box = document.createElement("label"); box.className = "field ar-model"; box.id = "arResolutionBox";
-      box.innerHTML = '<span class="label">' + esc(tr("SDXL size")) + '</span><select id="arResolution"><option value="1024">1024 · ' + esc(tr("standard")) + '</option><option value="512">512 · ' + esc(tr("quick preview")) + '</option></select>';
-      $("arPainter").closest("label").insertAdjacentElement("afterend", box);
-      control = $("arResolution");
-      control.addEventListener("change", function () { keep(KEY.resolution, this.value); paintShapeTips(PAINTER_INFO[$("arPainter").value] || {}); paintForm(); });
-    }
-    box.hidden = $("arPainter").value !== "sdxl";
-    control.value = recall(KEY.resolution) === "512" ? "512" : "1024";
-    control.dataset.tip = tr("512 is a quick preview;1024 is the standard SDXL size. Wide and tall shapes keep their proportions.");
-  }
-  function differentialMask(key) { return key !== "sdxl" && key !== "qwen21" && (PAINTER_INFO[key] || {}).differential_mask !== false; }
+  function differentialMask(key) { return key !== UNAVAILABLE_PAINTER && key !== "qwen21" && (PAINTER_INFO[key] || {}).differential_mask !== false; }
   function paintMaskProfile() {
     var input = $("arMkSoft"), blocked = !differentialMask($("arPainter").value);
     if (!input) return;
@@ -261,14 +261,14 @@
     if (!blocked && input.disabled) input.checked = state.maskSoftWanted !== false;
     if (blocked) input.checked = false;
     input.disabled = blocked;
-    var reason = blocked ? tr($("arPainter").value === "sdxl" ? "Differential diffusion is available with Krea or Qwen 2512; SDXL keeps feathered mask edges" : "Differential diffusion is available with Krea or Qwen 2512") : "";
+    var reason = blocked ? tr("Differential diffusion is available with Krea or Qwen 2512") : "";
     input.title = reason;
     var label = input.closest("label");
     if (label) { label.title = reason; label.dataset.tip = reason; label.classList.toggle("is-disabled", blocked); }
   }
   function paintShapeTips(profile) {
     Array.prototype.forEach.call(document.querySelectorAll("#arShapes label"), function (label) {
-      var id = label.querySelector("input").value, sizes = (profile.resolutions_by_size || {})[String(resolutionNow())] || profile.resolutions || {}, size = sizes[id], shape = shapeOf(id);
+      var id = label.querySelector("input").value, sizes = profile.resolutions || {}, size = sizes[id], shape = shapeOf(id);
       var text = size ? id + " · " + size.join("×") : shape.label;
       label.dataset.tip = text + " · " + tr("for " + shape.say);
       label.setAttribute("aria-label", text);
@@ -295,8 +295,7 @@
     Array.prototype.forEach.call(document.querySelectorAll("#arShapes input"), function (i) { i.checked = (run.shapes || []).indexOf(i.value) >= 0; });
     $("arCount").value = String(run.count || 1);
     $("arSeed").value = withSeed && run.seed != null ? String(run.seed) : "";
-    if (PAINTERS[run.painter]) $("arPainter").value = run.painter;
-    if (run.painter === "sdxl") keep(KEY.resolution, String(run.resolution === 512 ? 512 : 1024));
+    if (Array.prototype.some.call($("arPainter").options, function (o) { return o.value === run.painter; })) $("arPainter").value = run.painter;
     paintPainter();
     if (run.model && !$("arModelBox").hidden) $("arModel").value = run.model;   // HERESY 1318
     if (PAINTERS[run.painter]) { var sa = sampAll(); if (run.sampling) { sa[run.painter] = Object.assign(sampDefaults(run.painter), run.sampling); if (run.sampling.lightning != null) { sa[run.painter].lightOn = +run.sampling.lightning > 0; if (!(+run.sampling.lightning > 0)) delete sa[run.painter].lightning; } } else delete sa[run.painter]; keep(KEY.sampling, JSON.stringify(sa)); paintSampling(); }   // HERESY 1319
@@ -559,10 +558,11 @@
     state.maskEditor = { canvas: cm, paint: function (x, y, rad) { var s0 = size.value; size.value = String(rad * 2); last = null; dab({ x: x, y: y }); last = null; size.value = s0; }, done: done, close: close };
   }
   function draw(again) {
+    var selected = again ? again.painter : $("arPainter").value, profile = PAINTER_INFO[selected];
+    if (!profile || !profile.ready || profile.viable === false) return toast(tr(profile && profile.unavailable_reason || state.unavailableReason || "This local Artist painter is unavailable"), "bad");
     if (runsFull()) return toast(tr("Two runs at a time: the next one can be asked when one of them ends"), "bad");   // HERESY 1340
     var body = again ? { prompt: again.prompt, shapes: again.shapes, count: again.count, seed: null, painter: again.painter }
       : (function () { if (state.seedMode) state.seedMode.before(); return { prompt: $("arPrompt").value.trim(), shapes: shapesPicked(), count: +$("arCount").value || 1, seed: seedAsked(), painter: $("arPainter").value }; })();   // HERESY 1330: the seed as its mode wants it
-    if (body.painter === "sdxl") body.resolution = again ? (again.resolution === 512 ? 512 : 1024) : resolutionNow();
     if (again && again.model) body.model = again.model;                 // HERESY 1318: the fp8 fine-tune
     else if (!again && !$("arModelBox").hidden) body.model = $("arModel").value;
     // HERESY 1326 (Viktor 10.10.2026, 14:57: «ловлю ошибку. Хотя выбрано всё правильно»): 1319 put the sampling between the two
@@ -706,6 +706,13 @@
     clearTimeout(state.timer);
     var painting = state.runs.some(function (r) { return r.status === "running"; });
     if (document.body.dataset.tab === "artist" && state.runs.some(live)) state.timer = setTimeout(load, ms || (painting ? 1200 : 2500));
+  }
+  function repeatReason(r) {
+    if (r.kind === "upscale") return "";  // Upscaling stays available independently of painting models.
+    var profile = PAINTER_INFO[r.painter];
+    if (!profile) return tr("This run is retained as history; its painter is unavailable");
+    if (state.noPainters || !profile.ready || profile.viable === false) return tr(profile.unavailable_reason || state.unavailableReason || "This local Artist painter is unavailable");
+    return "";
   }
   function runState(r) {
     if (r.status === "queued") return '<span class="ar-state is-wait">' + esc(tr(r.waiting ? "waits for a card" : "in the queue")) + "</span>" +
@@ -869,13 +876,13 @@
     }
     box.innerHTML = state.runs.map(function (r) {
       var pics = (r.pictures || []).map(function (p, i) { return picHtml(r, p, i); }).join("") + (live(r) ? waitHtml(r) : "");
-      var open = !!state.open[r.id];
+      var open = !!state.open[r.id], blocked = repeatReason(r);
       return '<article class="ar-run' + (live(r) ? " is-live" : "") + '" data-id="' + esc(r.id) + '">' +
         '<header class="ar-run-head"><span class="ar-when">' + esc(when(r.created)) + "</span>" +
         '<span class="ar-meta" translate="no">' + esc(painterLabel(r)) + " · " + esc(tr("seed")) + " " + esc(r.seed) +
         (r.count > 1 ? "…" + esc(r.seed + r.count - 1) : "") + "</span>" + runState(r) +
         '<span class="ar-acts"><button type="button" class="btn ghost small" data-act="form" data-tip="' + esc(tr("Its prompt, shapes, variations and seed back in the form above")) + '">' + esc(tr("To the form")) + "</button>" +
-        '<button type="button" class="btn ghost small" data-act="again" data-tip="' + esc(tr(r.kind === "upscale" ? "The same picture upscaled once more" : "The same prompt and shapes once more, from a new seed")) + '"' + (live(r) ? " disabled" : "") + ">" + esc(tr("Again")) + "</button>" +
+        '<button type="button" class="btn ghost small" data-act="again" data-tip="' + esc(blocked || tr(r.kind === "upscale" ? "The same picture upscaled once more" : "The same prompt and shapes once more, from a new seed")) + '"' + (live(r) || blocked ? " disabled" : "") + ">" + esc(tr("Again")) + "</button>" +
         '<button type="button" class="btn ghost small danger" data-act="trash" data-tip="' + esc(tr("The run and its pictures to the trash (the studio's trash/artist/)")) + '"' + (live(r) ? " disabled" : "") + ">" + esc(tr("Trash")) + "</button></span></header>" +
         '<p class="ar-prompt' + (open ? " is-open" : "") + '" data-act="fold" translate="no">' + esc(r.prompt) + "</p>" +
         '<div class="ar-pics">' + pics + "</div></article>";
@@ -1401,7 +1408,7 @@
   // HERESY 1316 (Viktor 10.10.2026: «Положил в artwork/loras/<семейство>/»; «скан поддиректорий»; «возле адаптера лежит его картинка»;
   // «сканирование Civitai по хешу»; «Адаптеры пользователи пусть себе тянут по твоему Гайду прямо в комнате»): the adapters of the
   // painter's family, each at its strength, up to four, kept per family in this browser; the library to pick them from
-  var FAMILY = { "sdxl": "sdxl", "krea2-q4": "krea2", "krea2-q8": "krea2", "qwen21": "qwen-image-2.1", "qwen2512-q4": "qwen-image-2512", "qwen2512-q6": "qwen-image-2512", "qwen2512-fp8": "qwen-image-2512" };
+  var FAMILY = { "krea2-q4": "krea2", "krea2-q8": "krea2", "qwen21": "qwen-image-2.1", "qwen2512-q4": "qwen-image-2512", "qwen2512-q6": "qwen-image-2512", "qwen2512-fp8": "qwen-image-2512" };
   var LORA_MAX = 4;
   KEY.loras = "yue2.arLoras";
   function familyNow() { return FAMILY[$("arPainter").value] || ""; }
@@ -1417,7 +1424,7 @@
     var box = $("arLoraList"), list = lorasNow(), fam = familyNow();
     if (!box) return;
     var titles = (state.loraLib && state.loraLib.titles) || {}, have = state.loraLib ? loraRows(fam).length : null;
-    $("arLoraSay").textContent = list.length ? list.length + " / " + LORA_MAX : have === 0 ? tr("none here for " + (titles[fam] || fam)) : have ? tr(have + " here") : "";
+    $("arLoraSay").textContent = !fam ? tr("choose an available painter") : list.length ? list.length + " / " + LORA_MAX : have === 0 ? tr("none here for " + (titles[fam] || fam)) : have ? tr(have + " here") : "";
     $("arLoraAdd").disabled = !fam;
     box.innerHTML = list.map(function (l, i) {
       var e = loraFind(l.id), words = ((e && e.info && e.info.words) || []).slice(0, 4);
@@ -1504,7 +1511,7 @@
       if (!rows.length) {
         grid.innerHTML = '<div class="ar-lib-empty"><p>' + esc(tr("No adapters for " + (titles[fam] || fam) + " here yet.")) + "</p><p>" +   // HERESY 1339: one sentence each
           esc(tr("Put .safetensors files into the studio's artwork/loras/" + fam + "/ folder: any folders inside it become groups here; a picture beside a file with its name (NAME.jpg, NAME.png, NAME.preview.png) shows on its card.")) + "</p><p>" +
-          esc(tr("On Civitai, pick adapters by their base model (" + ({ "krea2": "Krea 2", "qwen-image-2.1": "Qwen 2.1", "qwen-image-2512": "Qwen", "sdxl": "SDXL 1.0" }[fam] || fam) + "), " +
+          esc(tr("On Civitai, pick adapters by their base model (" + ({ "krea2": "Krea 2", "qwen-image-2.1": "Qwen 2.1", "qwen-image-2512": "Qwen" }[fam] || fam) + "), " +
             "download the .safetensors and put it there; Look up on Civitai then fills in its name and its trigger words.")) + "</p></div>";
       } else {
         grid.innerHTML = list.map(function (r) {
@@ -1753,6 +1760,6 @@
     compare: function () { return state.compare; }, picking: function () { return !!state.cmpA; } };  // 1308
   window.HeresyArtist = { init: init, reload: function () { state.pinSel = false; paintHead(); return load(); }, setTake: setTake,
     loras: { reload: loadLoras, now: lorasNow, set: setLoras, open: openLoraLib, lib: function () { return state.loraLibOpen; } },   // HERESY 1316: for the checks
-    resolution: { now: resolutionNow }, painters: loadPainters, sampling: { now: sampNow, body: samplingBody, paint: paintSampling },   // HERESY 1318, 1319
+    painters: loadPainters, sampling: { now: sampNow, body: samplingBody, paint: paintSampling },   // HERESY 1318, 1319
     canvas: { open: openCanvas, place: function () { return state.place; } } };   // HERESY 1346: for the checks
 })();

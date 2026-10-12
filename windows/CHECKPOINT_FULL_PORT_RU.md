@@ -3,6 +3,7 @@
 **Полный порт всех обещанных функций не готов.** Подтверждены локальный запуск и отдельные
 случаи обработки или inference. Многие сценарии только адаптированы в коде; часть пакетов
 и моделей отсутствует. Оценка относится к существующим upstream функциям и согласованному перечню.
+SDXL снят пользователем из scope; его pending test отменён. Artist и другие модули остаются.
 Файл модели, успешный import или ответ health не доказывают работу всех функций модуля.
 
 ## Ветка и сохранение
@@ -46,7 +47,7 @@ powershell.exe -NoProfile -File 'E:\Projects\Ruach_Studio\full-windows-port\wind
 powershell.exe -NoProfile -File 'E:\Projects\Ruach_Studio\full-windows-port\windows\Stop-Writer.ps1'
 ```
 
-Image test приостановлен до ответа пользователя «готово». Фонового цикла запусков или
+SDXL image test отменён пользователем; «готово» и memory-ready больше не требуются. Фонового цикла запусков или
 замеров нет. Claim сохранён и блокирует автоматический повтор. Перед продолжением нужно
 проверить зафиксированную остановку до загрузки модели и сохранить историю попытки.
 
@@ -66,7 +67,7 @@ Image test приостановлен до ответа пользователя
 | Функция | Реализация | Статус проверки | Доказательство / ограничение |
 |---|---|---|---|
 | Native Windows launcher / engine / Lab / Writer | Реализовано | real | Реальный старт, точная принадлежность PID, health, автоматический Writer, остановка 5 PID и освобождение 3 портов; R1 |
-| Шесть вкладок / локальный режим | Реализовано | real | Chrome: 6 вкладок, Writer ready, SDXL выбран, 0 JS-ошибок/0 внешних запросов приложения; R2. Это не исполнение всех кнопок/ML-функций |
+| Шесть вкладок / локальный режим | Реализовано | real | Chrome: 6 вкладок, Writer ready; исторический SDXL selection позднее снят, 0 JS-ошибок/0 внешних запросов приложения; R2. Это не исполнение всех кнопок/ML-функций |
 | GPU FIFO / handoff / unload / отмена / исключения | Реализовано | synthetic | 42 native C++ checks с искусственной работой и abandon-mutex; не music inference. R3 |
 | Python subprocess / Unicode / watchdog / loopback guards | Реализовано | synthetic | 39 runtime checks, собственные stdlib child processes; не доказательство работоспособности optional ML |
 | ML dependencies / CUDA / FFmpeg | Частичный согласованный набор установлен | real | Две изолированные среды, 65 SHA-verified wheels, pip checks/imports и CUDA metadata; FFmpeg9.0.2 actual version. R4. Полный requirements-core/art candidates НЕ установлен |
@@ -120,23 +121,12 @@ Image test приостановлен до ответа пользователя
 
 | Функция | Реализация | Статус проверки | Доказательство / ограничение |
 |---|---|---|---|
-| SDXL text-to-image512 sequential validation | Worker/profile реализован; модель установлена | synthetic; resourceblocked | Единственный real attempt20261012-233238-7136 остановлен after_import, до painter/model load.0 weights/0 steps/0 PNG; R11 |
-| SDXL512 production component mode /1024 component mode | Код реализован | synthetic; notrun | Pipeline calls/геометрия mocked; реальный ML не запускался.11.5 GiB оценка относится только к sequential512 test, не validatedproduction budget |
-| References input/strength /img2 img | API/files+Img2 ImgPipeline | synthetic; notrun(ML) | Syntheticreference/maskbytes/pathguards+mock image/strength; реальные пиксели негенерировались |
-| Mask /inpaint /grow /feather /composite | InpaintPipeline и pixel operations | synthetic; notrun(ML) | Mock mask/composite calls; actual inpaint quality отсутствует |
-| Outpaint /fit /place /canvas | Geometry/pad/mask/crop code | synthetic; notrun(ML) | Параметрыгеометрии проверены; настоящеедорисовывание/visualquality нет |
-| Differential diffusion | Исходные ограничения семейства сохранены | synthetic(rejection);notrun(Krea/Qwen) | SDXL не поддерживает этот режим по явному ограничению; это не новая обязательная SDXL-функция. Исходные Krea/Qwen пути требуют отсутствующих моделей |
-| Variants1–4 / seeds /square-wide-portrait | Реализовано | synthetic; notrun(ML) | 512 buckets512²/672×384/384×672; 1024 buckets1024²/1344×768/768×1344. Validation разрешает только count1 square |
-| Live previews /12 step callbacks | Код/protocol реализован | synthetic; notrun(latents) | Настоящие latents→JPEG не проверены. Attempt preview=false, до steps не дошёл |
-| Samplers/defaults/simple/Karras | SDXL Euler/EulerSDE/DPM++/Heun | synthetic; notrun(quality) | Метаданные/API frontend gates проверены; Karras только DPM++; реальные samplers не сравнивались |
-| SDXL LoRA library/load/weights/strength | Реализовано | synthetic; notrun; missing(adapters) | Metadata/pathguards и mock load_lora_weights / set_adapters; artwork/loras adapters отсутствуют. Validation LoRA запрещает |
-| Civitai search/download | Исходный код; local-only disables | synthetic(rejection); disabled | Никаких внешних поисков/скачиваний/secretkeys; это недоступная online функция |
-| Model selection /alternateSDXL /single-file | FolderJSONselector реализован; alternatecode | real(UI); synthetic; notrun(alternates) | ActualChrome выбирает installedSDXL. Alternatecheckpoint не проверен; single-file требует отсутствующие localCyberRealistic configs |
-| Krea /Qwen2512 /Qwen2.1 painters | Исходные loaders; runtime notinstalled | notrun; hardwareblocked(standard profiles) | KreaQ4 gate12500>12288 MiB, QwenQ4 gate15500; Qwen2.1 gate21000. FP8 streaming6000 fallback естьвкоде, но RAM/Windows inference не валидированы; доступным не объявляется |
-| Image upscale×2/×4/2 K/4 K | Spandrel/tiledworker | synthetic(path); notrun; missing(deps+model) | Нет spandrel и upscaler.pth/.safetensors; конкретная approvedmodel невыбрана |
-| Gallery/files/star/compare | Исходный frontend/backend | synthetic(protocol); notrun(realgallery) | JSONrun metadata проверены; настоящих Artist картинок нет |
-| Artist trash/restore/permanent removal | Исходный workflow | notrun(integration) | Отдельных Windows integration tests этихоперацийнет; пользовательскиефайлы не удалялись |
-| Stop/cancel/watchdog/timeout | Ownedprocess cleanup/queuecancel | synthetic; notrun(real ML stop) | Реальные stdlibchildren/Unicode/errors/watchdog; standalone timeout mocked. Активный MLdenoising неостанавливался |
+| SDXL pipeline/profile/model selection | Удалено из активной интеграции | removed_by_user | Worker/family/setup checks/auto-download/default selection сняты. Pending test отменён, memory-ready не требуется. Веса/venv/cache сохранены; R18 |
+| Krea/Qwen generation /refs /masks /outpaint /samplers /LoRA | Существующие backend пути сохранены | synthetic; notrun(ML); missing/hardwareblocked | Подходящего установленного рисовальщика нет. UI показывает unavailable и запрещает Draw. KreaQ4 Artist gate12500>12288, стандартные Qwen15500–22500; streaming не подтверждён |
+| Image upscale×2/×4/2 K/4 K | Spandrel/tiledworker сохранён | synthetic; notrun; missing(deps+model) | Отдельный optional RealESRGAN_x4plus+Spandrel пакет; SDXL ему не требуется |
+| Gallery/files/star/compare/upload | Существующие frontend/backend сохранены | synthetic(protocol); notrun(fullgallery) | Эта комната не удалена; своих реальных generated pictures нет |
+| Artist trash/restore/permanent removal | Существующий workflow сохранён | notrun(integration) | Пользовательские картинки не удалялись |
+| Stop/cancel/watchdog/timeout | Owned process/queue cleanup сохранён | synthetic; notrun(real ML) | Стандартные children/Unicode/watchdog fixtures; активный ML не останавливался |
 
 ## Librarian
 
@@ -177,7 +167,7 @@ Image test приостановлен до ответа пользователя
 
 ## Недостающие зависимости и согласование
 
-Фактический core — только DSP/Whisper subset: 41 distribution с pip. Art — SDXL subset:
+Фактический core — только DSP/Whisper subset: 41 distribution с pip. Art — сохранённая общая среда image libraries:
 50 с pip. В core отсутствуют `audio-separator`, `demucs`, `onnxruntime-gpu`, `transformers`,
 `torchvision`, `accelerate`, `peft` и `UniverSR`. Установленный обычный `onnxruntime==1.23.2`
 не заменяет separator или GPU-пакет. В art есть Torch/Torchvision, Diffusers, Transformers,
@@ -191,7 +181,7 @@ Accelerate и PEFT, но нет Spandrel, GGUF и Kernels. Candidate requirement
 | Trainer | bf16 base 7 799 983 228 B; MERT 2 529 812 848 B с configs/custom Python; head 171 305 291 B; core Transformers runtime | Audit и новое approval, особенно MERT `trust_remote_code=True`. CC BY-NC 4.0. Помимо установки требуется ≥20 000 MiB свободной VRAM; RTX 3060 12 GB не проходит. Int8 base распаковывается в bf16 |
 | Image upscale | Spandrel и конкретная `.pth`/`.safetensors` модель | Выбор pin/license/size, Windows closure и approval. Requested 4000 MiB не является измеренным peak |
 | Creator/Artist LoRA и sliders | Конкретные согласованные adapters/GGUF | Model/license/pin audit и отдельный inference GO. Metadata catalog не является весами |
-| Krea/Qwen | GGUF/parts/filter/configs и optional packages | Не входят в SDXL approval. Krea Q4 gate 12 500, Qwen Q4 15 500 MiB выше 12 288 MiB полной VRAM. FP8 streaming fallback не валидирован; доступным не объявляется |
+| Krea/Qwen | GGUF/parts/filter/configs и optional packages | Не устанавливались в согласованном runtime subset; SDXL снят из scope. Krea Q4 gate 12 500, Qwen Q4 15 500 MiB выше 12 288 MiB полной VRAM. FP8 streaming fallback не валидирован; доступным не объявляется |
 
 При сохранённом GPU free 10 590 MiB и WDDM reserve 512 MiB effective room был 10 078 MiB.
 Stems gate 8000 потенциально помещается, UniverSR gate 11 000 не проходит. Эти gates не
@@ -211,23 +201,9 @@ ledgers сохраняют неопределённость и planning allowanc
 3. Без исполнения нового vendor-кода: source/license/pin/Windows wheel audit и точный план stems, UniverSR, SheetSage, upscaler или LoRA. Загрузку, установку и запуск optional-компонентов согласовать отдельно.
 4. Открытие экспортов в выбранной DAW: нужен отдельный запуск приложения; если DAW отсутствует, отдельно согласовать установку. Сейчас никакая DAW не запускалась.
 
-## Image checkpoint и пределы выводов
+## Снятый image test и пределы выводов
 
-Единственная попытка `20261012-233238-7136`: до import commit 12 012 298 240 B,
-после import 9 904 226 304 B (9,224 GiB), ниже guard 10 200 547 328 B (9,5 GiB).
-Недостаток — 296 321 024 B. Private commit достиг 2 140 987 392 B, около 1,994 GiB.
-Веса модели не загружались; denoising не начинался; PNG — 0. Status claim:
-`blocked_before_model_load`. Оригинальный claim, stdout и stderr сохранены.
-
-Будущий admission — 11,5 GiB с allowance импорта 2 GiB. После импорта остаётся guard
-9,5 GiB, во время работы — 2 GiB. Это оценка специального sequential512 профиля;
-успешного измерения production component1024 режима нет.
-
-Последний сохранённый замер — **20:37:45 UTC**: RAM 18 569 760 768 B (17,294 GiB),
-machine commit 12 031 754 240 B (11,205 GiB), GPU free 10 590 MiB. До 11,5 GiB
-не хватало 316 276 736 B (0,295 GiB). Родитель уже попросил освободить память с ориентиром
-1 GiB и ответить «готово». Новых замеров, повторов и автоматизаций не назначено.
-Пользовательские приложения не закрывались.
+SDXL снят по прямому указанию пользователя. Pending image test и требование «готово» отменены. Ранее единственная попытка остановилась до загрузки весов/denoising;0 PNG. Claim, stdout/stderr и первоначальные receipts сохранены как история; их не нужно удалять/обходить ради продолжения. Test-Artist-OneFrame теперь только сообщает cancellation и отказывает запуску без model/runtime imports. Прежняя SDXL memory policy удалена из активного кода.
 
 Whisper подтверждён на 11 словах английской SAPI-фразы. Listener подтвердил только
 speech-versus-music после общего исправления prompt; прежняя hallucination synth-pop/guitar
@@ -236,7 +212,7 @@ speech-versus-music после общего исправления prompt; пр�
 
 ## Новое независимое продолжение
 
-На 2026-10-12 UTC исправлены два измеренных дефекта: short-clip Inspect и≈3 dB mono loss в FFmpeg fallback DAW. UI прошёл18 функциональных workflows без weighted AI:8 Writer/Librarian,1 pin lifecycle и9 Creator ABC/MIDI; mock health isolation проверена отдельно. Использованы собственные WAV/SMF/docs и уникальный scope `uiqa-aca129d0bafa`; user profiles/takes не удалялись. SDXL повторно не запускался. Один будущий dependency/model package: [OPTIONAL_RUNTIME_APPROVAL_RU.md](OPTIONAL_RUNTIME_APPROVAL_RU.md); до нового разрешения не установлен.
+На 2026-10-12 UTC исправлены два измеренных дефекта: short-clip Inspect и≈3 dB mono loss в FFmpeg fallback DAW. UI прошёл18 функциональных workflows без weighted AI:8 Writer/Librarian,1 pin lifecycle и9 Creator ABC/MIDI; mock health isolation проверена отдельно. Использованы собственные WAV/SMF/docs и уникальный scope `uiqa-aca129d0bafa`; user profiles/takes не удалялись. SDXL снят пользователем; дальнейший запуск не планируется. Один будущий dependency/model package: [OPTIONAL_RUNTIME_APPROVAL_RU.md](OPTIONAL_RUNTIME_APPROVAL_RU.md); до нового разрешения не установлен.
 
 ## Проверяемые свидетельства
 
@@ -252,12 +228,13 @@ speech-versus-music после общего исправления prompt; пр�
 | R8 | `windows/cache/real-audio/whisper-report.json`: настоящий CUDA Whisper / English SAPI |
 | R9 | `windows/cache/real-daw/report.json`: FLAC/FFmpeg/mix-only REAPER ZIP и DAWproject |
 | R10 | `windows/full-audio-models.json`; candidate versus installed requirements; `lab/separation_local.py` |
-| R11 | `windows/cache/artist-one-frame/claim.json`, original claim, `resources-20261012-203745.json`, `artist/20261012-233238-7136/`, `windows/artist-memory-policy.json` revision2 |
+| R11 | `windows/cache/artist-one-frame/claim.json`, original claim, `resources-20261012-203745.json`, `artist/20261012-233238-7136/`, старый policy в Git history (не активный launch gate) |
 | R12 | `windows/cache/listener/pilot/windows-listener-pilot-20261012-205111-9b08f8/attempt-20261012-230751-c4e836/metrics.json`; old attempts 230028/230417; `windows/build/listener-cuda/runtime-proof.json` |
 | R13 | `windows/cache/independent-ui/uiqa-aca129d0bafa/writer-collection-d99dc31c/report.json` и `windows/cache/independent-ui/uiqa-aca129d0bafa/collection-pin-final-199ec956/report.json`:8 notebook/mock draft/library UI workflows+pin; собственные docs/takes,0 JS exceptions |
 | R14 | `windows/cache/independent-ui/uiqa-aca129d0bafa/creator-2026-10-12T21-39-58-736Z-c13bf180/creator-workflows-check.json`:9 real browser score/MIDI workflows;3 PNG/download bytes, no inference requests |
 | R15 | `windows/cache/refiner-independent/20261013-002459-c13983/report.json`, `windows/REFINER_INDEPENDENT_RU.md`:9 actual worker/FFmpeg commands +4 regression tests |
 | R16 | `windows/cache/daw-structural/20261012T213117Z-9060b9ed/report.json`:10 REAPER/DAWproject exports,23 regressions, actual codec/signal/failure preservation |
+| R18 | `windows/cache/sdxl-removal/sdxl-removed-b768dbf175/complete-summary.json`, `windows/SDXL_REMOVAL_RU.md`:SDXL removal/API rejection/retained models/6tab UI/owned shutdown |
 | R17 | `windows/cache/independent-ui/uiqa-aca129d0bafa/complete-summary.json` и `shutdown-proof.json`:scope/источники/границы,0 own PIDs/Chrome/ports после stop |
 | R13 | `windows/cache/full-suite/current-summary.json`, `final-closure.json`; `windows/cache/listener/final-verification.json` |
 

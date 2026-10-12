@@ -50,7 +50,7 @@ function harness(filename, response, preferences={}) {
 const localWeights={mode:'local',script:false,download_enabled:false,notice:'Local presence and size only; SHA256 was not validated.',now:100,
   last:{at:100,mode:'local-presence-and-size',counts:{here:1,missing:1,differs:1,unknown:0,failed:0},
     parts:[{part:'backbone',label:'Backbone',size:'4.3 GB',rows:[{state:'here',text:'model.gguf'},{state:'differs',text:'partial.gguf'},{state:'missing',text:'vae.gguf'}]}]},
-  extras:[{name:'artwork',label:'Artwork',what:'Local models',variants:[{id:'sdxl',label:'SDXL',size:'6.9 GB',here:false}]}],
+  extras:[{name:'artwork',label:'Artwork',what:'Local models',variants:[{id:'q4',label:'Krea 2 Muse Q4',size:'26 GB',here:false}]}],
   job:{status:'running',kind:'fetch',started:100,which:{part:'backbone'},expect:4000,written:1000,lines:['fake legacy job']}};
 const localUpdate={mode:'local',lookup_disabled:true,current:'2.0.0-rc5',newer:true,checked:0,can_run:false,running:false,
   latest:{version:'99.0.0',notes:'Cached release',url:'https://evil.invalid'},why:'Update manually from https://github.com/vrazraz/Windows-Music-Lab after reviewing your local branch.'};

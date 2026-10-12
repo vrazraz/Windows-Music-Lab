@@ -4559,5 +4559,16 @@ RuachI18n.add("ru", {
 "painted from the picture": "рисуется по картинке",
 "repainted by the mask": "перерисовывается по маске",
 "painted around the picture": "дорисовывается вокруг картинки",
-"painted around, and by the mask": "дорисовывается вокруг и по маске"
+"painted around, and by the mask": "дорисовывается вокруг и по маске",
+"Checking local Artist models": "Проверяем локальные модели Artist",
+"Local Artist painter unavailable": "Рисовальщик недоступен",
+"No installed Krea or Qwen painter is available; local model files and a compatible GPU are required": "Нет доступной установленной Krea/Qwen: нужны локальные модели и подходящая видеокарта",
+"Local Artist model availability could not be checked; drawing is unavailable": "Не удалось проверить локальные модели Artist; генерация недоступна",
+"No available local painter — Artist tools remain available": "Нет доступного рисовальщика; остальные инструменты Artist работают",
+"By the cards: available local Krea/Qwen painter": "По видеокартам: доступная локальная Krea/Qwen",
+"Only installed Krea/Qwen painters with enough VRAM can generate artwork": "Для генерации нужны установленная Krea/Qwen и достаточная VRAM",
+"Drawing unavailable": "Генерация недоступна",
+"choose an available painter": "нужен доступный рисовальщик",
+"retained history": "сохранено в истории",
+"This run is retained as history; its painter is unavailable": "Запись сохранена в истории; её рисовальщик недоступен"
 });

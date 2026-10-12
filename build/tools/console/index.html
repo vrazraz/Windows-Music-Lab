@@ -336,21 +336,19 @@ Blend · an add-on: two thirds Standard, one third Legacy"></select></label>
       </div>
     </div>
 
-    <!-- HERESY 1167 (Viktor: «Muse - отличный файнтюн… Для карт ниже 24GB VRAM… оставим SDXL»; «Переключатель квантов Q8 / Q4
-         оформишь в Engine? Изначальным выставь Q4»): who paints a take's artwork; this browser's choice, every draw asks for it -->
+    <!-- A take uses an installed supported local painter; unavailable choices never trigger a fallback download. -->
     <div class="card art-card eg-art" id="artCard">
       <h3>Artwork</h3>
       <p class="hint">Who paints a take's artwork: the player's, the cards', the MP3's cover. A drawing waits in the queue for a card with room.</p>
       <label class="field"><span class="label">Painter</span>
-        <select id="artPainter" data-tip="Krea 2 Muse paints instruments and scenes far truer than SDXL (the studio's A/B on twelve instruments, 05.10.2026); SDXL is for cards it does not fit">
-          <option value="">By the cards: Krea 2 Muse Q4 from 16 GB, else SDXL</option>
+        <select id="artPainter" data-tip="Only installed Krea/Qwen painters with enough VRAM can generate artwork">
+          <option value="">No available local painter — Artist tools remain available</option>
           <option value="krea2-q4">Krea 2 Muse · Q4 · about 12 GB · about 25 s a picture</option>
           <option value="krea2-q8">Krea 2 Muse · Q8 · about 18 GB · about 22 s a picture</option>
-          <option value="sdxl">SDXL CyberRealistic · about 15 GB · about 10 s a picture</option>
         </select></label>
       <p class="row-hint">Krea 2 Muse by <a href="https://civitai.com/models/2741166" target="_blank" rel="noopener noreferrer">Stable Yogi</a>, a fine-tune of
         <a href="https://krea.ai/krea-2-licensing" target="_blank" rel="noopener noreferrer">Krea 2</a> (Krea 2 Community License: its pictures pass a content filter);
-        SDXL: CyberRealistic XL by Cyberdelia. Qwen-Image 2512 (Apache-2.0) paints a cover with Lightning (lightx2v, Apache-2.0) when its file is here; Qwen-Image 2.1 is under Qwen's research licence: research and evaluation only, not for a song that is sold. Times on an RTX 3090, the prompt and the look-over not counted.</p>
+        Qwen-Image 2512 (Apache-2.0) paints a cover with Lightning (lightx2v, Apache-2.0) when its file is here; Qwen-Image 2.1 is under Qwen's research licence: research and evaluation only, not for a song that is sold. Times on an RTX 3090, the prompt and the look-over not counted.</p>
     </div>
 
     <div class="card wide lora-card eg-vae">
