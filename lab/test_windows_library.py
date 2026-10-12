@@ -95,7 +95,7 @@ class Files(unittest.TestCase):
     @staticmethod
     def ffmpeg(args, **kwargs):
         if args[0] == "ffprobe":
-            return subprocess.CompletedProcess(args, 0, stdout="1.000\n", stderr="")
+            return subprocess.CompletedProcess(args, 0, stdout="1\n" if "stream=channels" in args else "1.000\n", stderr="")
         if args[0] == "ffmpeg":
             shutil.copyfile(args[args.index("-i") + 1], args[-1])
             return subprocess.CompletedProcess(args, 0)
@@ -326,6 +326,33 @@ class Files(unittest.TestCase):
         self.assertIn("-ac", args)
         self.assertEqual(run.call_args.kwargs["root"], self.kit)
         self.assertEqual(target.read_bytes(), source.read_bytes())
+
+    def test_ffmpeg_mono_fallback_preserves_full_gain(self):
+        source = self.kit / "mono.flac"
+        source.write_bytes(b"synthetic compressed placeholder")
+        target = source.with_suffix(".wav")
+        with patch.object(daw_audio, "run_process", side_effect=self.ffmpeg) as run:
+            daw_audio.to_wav(source, target, root=self.kit)
+        probe, convert = run.call_args_list
+        self.assertEqual(probe.args[0][0], "ffprobe")
+        self.assertIn("stream=channels", probe.args[0])
+        self.assertIn("pan=stereo|c0=c0|c1=c0", convert.args[0])
+        self.assertEqual(convert.kwargs["root"], self.kit)
+
+    def test_ffmpeg_nonmono_fallback_keeps_existing_matrix(self):
+        source = self.kit / "multichannel.flac"
+        source.write_bytes(b"synthetic compressed placeholder")
+        target = source.with_suffix(".wav")
+        for channels in (2, 6, 128):
+            with self.subTest(channels=channels):
+                def nonmono(args, **kwargs):
+                    if args[0] == "ffprobe":
+                        return subprocess.CompletedProcess(args, 0, stdout=str(channels) + "\n", stderr="")
+                    return self.ffmpeg(args, **kwargs)
+                with patch.object(daw_audio, "run_process", side_effect=nonmono) as run:
+                    daw_audio.to_wav(source, target, root=self.kit)
+                self.assertNotIn("-af", run.call_args.args[0])
+                self.assertEqual(run.call_args.kwargs["root"], self.kit)
 
     def test_native_daw_discovery_and_no_program_launch(self):
         programs = self.root / "Program Files"

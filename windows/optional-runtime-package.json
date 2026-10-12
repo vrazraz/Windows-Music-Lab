@@ -1,0 +1,998 @@
+{
+  "schemaVersion": 1,
+  "packageId": "ruach-windows-optional-20261012",
+  "projectRoot": "E:/Projects/Ruach_Studio/full-windows-port",
+  "status": "proposal_only_requires_new_human_approval",
+  "installationExecuted": false,
+  "inferenceExecuted": false,
+  "approvalComplete": false,
+  "ready": false,
+  "baseline": {
+    "python": "3.10",
+    "corePythonRelativePath": ".venv/Scripts/python.exe",
+    "artPythonRelativePath": ".venv-art/Scripts/python.exe",
+    "torch": "2.11.0+cu128",
+    "numpy": "2.2.6",
+    "coreLockRelativePath": "windows/requirements-validation-core.lock.txt",
+    "artLockRelativePath": "windows/requirements-validation-art.lock.txt",
+    "coreCanonicalLockSha256": "1d41dce576e595940fd4ff696cb0bda685390e266df733dd44e7719ee35ee7a7",
+    "artCanonicalLockSha256": "2b99aa6c598ca2559fa74d6361951f44bc1401f0d5f4951d6838bd03c4b1885b",
+    "historicalReadyRelativePath": "windows/cache/validation-runtime/ready.json",
+    "textNormalizationEvidence": "windows/cache/checkpoint/text-normalization.json",
+    "preserveAllExistingDistributionVersions": true,
+    "preserveBaselineLockfiles": true,
+    "normalizationEvidenceExists": true
+  },
+  "profiles": {
+    "stems-vocals": {
+      "implementation": "lab/stems_job.py; local_separator_class in lab/separation_local.py; audio-separator 0.47.0 MDXC",
+      "environment": "core",
+      "gpuGateMiB": 8000,
+      "currentAdmittedFreeMiB": 10078,
+      "resourceGateAtSuppliedSnapshot": "passes",
+      "realWindowsInferenceVerified": false,
+      "status": "dependency wheels pinned; original RoFormer checkpoint terms unresolved; no inference authorization",
+      "acceptance": "10 s synthetic stereo harmonic/percussive input, local-only Vocals/Instrumental nonempty finite FLAC, expected channels/rate/duration, recompose mixture/inspect clipping; log timing/VRAM/RAM; no quality claim on real music"
+    },
+    "stems-four": {
+      "implementation": "lab/stems_job.py; RoFormer first, Demucs htdemucs_ft on instrumental",
+      "environment": "core",
+      "gpuGateMiB": 8000,
+      "currentAdmittedFreeMiB": 10078,
+      "resourceGateAtSuppliedSnapshot": "passes",
+      "realWindowsInferenceVerified": false,
+      "status": "same RoFormer licence hold; four original Meta weights pinned",
+      "acceptance": "same 10 s synthetic input; Vocals/Drums/Bass/Other files and metadata verified; verify actual native model execution not mocked resolver"
+    },
+    "creator-transcriber": {
+      "implementation": "existing windows/build/full-engine/yue-server.exe --transcriber models/SheetSage2-Q8_0.gguf; /transcribe",
+      "environment": "existing native engine",
+      "newPythonDependencies": [],
+      "gpuGateMiB": null,
+      "resourceGateAtSuppliedSnapshot": "unmeasured native 300-second fixed window; root-owned exclusive lease/headroom required",
+      "realWindowsInferenceVerified": false,
+      "status": "one converted GGUF pinned; NC licence; no separate yue-transcribe.exe currently found",
+      "acceptance": "one short synthetic musical recording through local /transcribe, parse ABC event/tempo/notes and MIDI export if supported; preserve log; 300 s padded input means short audio does not prove small memory"
+    },
+    "audio-upscale": {
+      "implementation": "lab/upscale_job.py; UniverSR.from_pretrained(existing local directory), soundfile/tensor path",
+      "environment": "core",
+      "gpuGateMiB": 11000,
+      "currentAdmittedFreeMiB": 10078,
+      "resourceGateAtSuppliedSnapshot": "blocked",
+      "idleCardPossibleFit": "12288-512=11776 MiB theoretical total; empty_fits special case requires no foreign GPU processes and current free>=11264, unvalidated here",
+      "realWindowsInferenceVerified": false,
+      "status": "source review/local wheel packaging pending; model metadata pinned; no running until unchanged guard grants 11000",
+      "acceptance": "only after all guards: one 2-5 s band-limited synthetic clip, mode subtle, single seed, one channel then short stereo; output 48k finite duration, logs/peak; 20 s production chunk remains unvalidated; do not lower guard based on theory"
+    },
+    "image-upscale": {
+      "implementation": "lab/artist_upscale.py; spandrel ModelLoader; 512 tile overlap32; official RealESRGAN_x4plus RRDBNet",
+      "environment": "art",
+      "gpuGateMiB": 4000,
+      "currentAdmittedFreeMiB": 10078,
+      "resourceGateAtSuppliedSnapshot": "passes",
+      "realWindowsInferenceVerified": false,
+      "status": "two new pure wheels; original model URL with pinned secondary metadata digest; restricted unpickling requires audit",
+      "acceptance": "one 256x256 synthetic raster ->1024x1024 PNG, finite RGB/channels, log loader architecture/scale/VRAM; then optionally existing local frame if still in scope"
+    },
+    "sdxl-adapter": {
+      "status": "optional_unresolved_excluded",
+      "networkQuotaBytes": 0,
+      "modelFiles": [],
+      "reason": "No original-author plain SDXL style LoRA with verified file/hash/license/compatibility finalized. Existing SDXL loader supports safetensors local LoRA; no LCM scheduler, so LCM/Lightning shortcut adapters excluded."
+    },
+    "creator-adapter": {
+      "status": "optional_unresolved_excluded",
+      "networkQuotaBytes": 0,
+      "modelFiles": [],
+      "reason": "No reviewed pinned YuE2 adapter established against this Q8 native backbone. Existing sources.json lists third-party experimental/style adapters, not proof of compatibility/permission. Native tensor mapping and A/B need separate review."
+    }
+  },
+  "wheels": [
+    {
+      "name": "audio-separator",
+      "version": "0.47.0",
+      "filename": "audio_separator-0.47.0-py3-none-any.whl",
+      "size": 433592,
+      "sha256": "756f3b620d78e581a117c6b6d96fe4f0eafc3432ab2824cb11532b4868bfd9a8",
+      "license": "MIT",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/audio-separator/0.47.0/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "beartype",
+      "version": "0.18.5",
+      "filename": "beartype-0.18.5-py3-none-any.whl",
+      "size": 917762,
+      "sha256": "5301a14f2a9a5540fe47ec6d34d758e9cd8331d36c4760fc7a5499ab86310089",
+      "license": "MIT",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/beartype/0.18.5/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "diffq-fixed",
+      "version": "0.2.4",
+      "filename": "diffq_fixed-0.2.4-cp310-cp310-win_amd64.whl",
+      "size": 106211,
+      "sha256": "d6fc81bd6ca17ebc04b8a163f9efae5afedf3274a4eee473f6742471a8d904bc",
+      "license": "CC-BY-NC-4.0",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/diffq-fixed/0.2.4/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "Cython",
+      "version": "3.1.4",
+      "filename": "cython-3.1.4-cp310-cp310-win_amd64.whl",
+      "size": 2709502,
+      "sha256": "1e0671be9859bb313d8df5ca9b9c137e384f1e025831c58cee9a839ace432d3c",
+      "license": "Apache-2.0",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/Cython/3.1.4/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "einops",
+      "version": "0.8.2",
+      "filename": "einops-0.8.2-py3-none-any.whl",
+      "size": 65638,
+      "sha256": "54058201ac7087911181bfec4af6091bb59380360f069276601256a76af08193",
+      "license": "MIT",
+      "environments": [
+        "core",
+        "art"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/einops/0.8.2/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "julius",
+      "version": "0.2.8",
+      "filename": "julius-0.2.8-py3-none-any.whl",
+      "size": 21819,
+      "sha256": "6891235cbc355e629d839f87489bff8ca46e57a0e7cc35abb909c7a2aa538c25",
+      "license": "MIT",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/julius/0.2.8/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "librosa",
+      "version": "0.10.2.post1",
+      "filename": "librosa-0.10.2.post1-py3-none-any.whl",
+      "size": 260089,
+      "sha256": "dc882750e8b577a63039f25661b7e39ec4cfbacc99c1cffba666cd664fb0a7a0",
+      "license": "ISC",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/librosa/0.10.2.post1/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "audioread",
+      "version": "3.1.0",
+      "filename": "audioread-3.1.0-py3-none-any.whl",
+      "size": 23143,
+      "sha256": "b30d1df6c5d3de5dcef0fb0e256f6ea17bdcf5f979408df0297d8a408e2971b4",
+      "license": "MIT",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/audioread/3.1.0/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "numba",
+      "version": "0.61.2",
+      "filename": "numba-0.61.2-cp310-cp310-win_amd64.whl",
+      "size": 2831612,
+      "sha256": "ae45830b129c6137294093b269ef0a22998ccc27bf7cf096ab8dcf7bca8946f9",
+      "license": "BSD; bundled notices audit pending",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/numba/0.61.2/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "llvmlite",
+      "version": "0.44.0",
+      "filename": "llvmlite-0.44.0-cp310-cp310-win_amd64.whl",
+      "size": 30332381,
+      "sha256": "41e3839150db4330e1b2716c0be3b5c4672525b4c9005e17c7597f835f351ce2",
+      "license": "BSD; bundled LLVM notices audit pending",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/llvmlite/0.44.0/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "scikit-learn",
+      "version": "1.7.2",
+      "filename": "scikit_learn-1.7.2-cp310-cp310-win_amd64.whl",
+      "size": 8886969,
+      "sha256": "ca250e6836d10e6f402436d6463d6c0e4d8e0234cfb6a9a47835bd392b852ce5",
+      "license": "BSD-3-Clause",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/scikit-learn/1.7.2/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "joblib",
+      "version": "1.5.2",
+      "filename": "joblib-1.5.2-py3-none-any.whl",
+      "size": 308396,
+      "sha256": "4e1f0bdbb987e6d843c70cf43714cb276623def372df3c22fe5266b2670bc241",
+      "license": "BSD-3-Clause",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/joblib/1.5.2/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "threadpoolctl",
+      "version": "3.6.0",
+      "filename": "threadpoolctl-3.6.0-py3-none-any.whl",
+      "size": 18638,
+      "sha256": "43a0b8fd5a2928500110039e43a5eed8480b918967083ea48dc3ab9f13c4a7fb",
+      "license": "BSD-3-Clause",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/threadpoolctl/3.6.0/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "decorator",
+      "version": "5.2.1",
+      "filename": "decorator-5.2.1-py3-none-any.whl",
+      "size": 9190,
+      "sha256": "d316bb415a2d9e2d2b3abcc4084c6502fc09240e292cd76a76afc106a1c8e04a",
+      "license": "BSD-2-Clause",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/decorator/5.2.1/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "pooch",
+      "version": "1.8.2",
+      "filename": "pooch-1.8.2-py3-none-any.whl",
+      "size": 64574,
+      "sha256": "3529a57096f7198778a5ceefd5ac3ef0e4d06a6ddaf9fc2d609b806f25302c47",
+      "license": "BSD-3-Clause",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/pooch/1.8.2/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "platformdirs",
+      "version": "4.4.0",
+      "filename": "platformdirs-4.4.0-py3-none-any.whl",
+      "size": 18654,
+      "sha256": "abd01743f24e5287cd7a5db3752faf1a2d65353f38ec26d98e25a6db65958c85",
+      "license": "MIT",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/platformdirs/4.4.0/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "soxr",
+      "version": "0.5.0.post1",
+      "filename": "soxr-0.5.0.post1-cp310-cp310-win_amd64.whl",
+      "size": 166881,
+      "sha256": "97f269bc26937c267a2ace43a77167d0c5c8bba5a2b45863bb6042b5b50c474e",
+      "license": "wrapper/library licence scope unresolved until wheel notices audit",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/soxr/0.5.0.post1/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "lazy-loader",
+      "version": "0.4",
+      "filename": "lazy_loader-0.4-py3-none-any.whl",
+      "size": 12097,
+      "sha256": "342aa8e14d543a154047afb4ba8ef17f5563baad3fc610d7b15b213b0f119efc",
+      "license": "BSD-3-Clause",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/lazy-loader/0.4/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "msgpack",
+      "version": "1.1.2",
+      "filename": "msgpack-1.1.2-cp310-cp310-win_amd64.whl",
+      "size": 71293,
+      "sha256": "db6192777d943bdaaafb6ba66d44bf65aa0e9c5616fa1d2da9bb08828c6b39aa",
+      "license": "Apache-2.0",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/msgpack/1.1.2/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "ml-collections",
+      "version": "1.1.0",
+      "filename": "ml_collections-1.1.0-py3-none-any.whl",
+      "size": 76707,
+      "sha256": "23b6fa4772aac1ae745a96044b925a5746145a70734f087eaca6626e92c05cbc",
+      "license": "Apache-2.0 source; wheel notice audit pending",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/ml-collections/1.1.0/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "absl-py",
+      "version": "2.3.1",
+      "filename": "absl_py-2.3.1-py3-none-any.whl",
+      "size": 135811,
+      "sha256": "eeecf07f0c2a93ace0772c92e596ace6d3d3996c042b2128459aaae2a76de11d",
+      "license": "Apache-2.0",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/absl-py/2.3.1/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "onnx-weekly",
+      "version": "1.24.0.dev20260928",
+      "filename": "onnx_weekly-1.24.0.dev20260928-cp310-cp310-win_amd64.whl",
+      "size": 7880654,
+      "sha256": "ca25599d81f16d032e2313af86e18feb84b4d23a0548cc3de76efe2a8fccbfcd",
+      "license": "Apache-2.0",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/onnx-weekly/1.24.0.dev20260928/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "ml-dtypes",
+      "version": "0.5.4",
+      "filename": "ml_dtypes-0.5.4-cp310-cp310-win_amd64.whl",
+      "size": 210738,
+      "sha256": "4ff7f3e7ca2972e7de850e7b8fcbb355304271e2933dd90814c1cb847414d6e2",
+      "license": "Apache-2.0",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/ml-dtypes/0.5.4/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "onnx2torch-py313",
+      "version": "1.6.0",
+      "filename": "onnx2torch_py313-1.6.0-py3-none-any.whl",
+      "size": 81251,
+      "sha256": "03b1cc771f93941cc221635547e97dd7823dffc05f052057e51c6a45fbacba70",
+      "license": "Apache-2.0",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/onnx2torch-py313/1.6.0/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "pydub",
+      "version": "0.25.1",
+      "filename": "pydub-0.25.1-py2.py3-none-any.whl",
+      "size": 32327,
+      "sha256": "65617e33033874b59d87db603aa1ed450633288aefead953b30bded59cb599a6",
+      "license": "MIT",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/pydub/0.25.1/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "resampy",
+      "version": "0.4.3",
+      "filename": "resampy-0.4.3-py3-none-any.whl",
+      "size": 3076529,
+      "sha256": "ad2ed64516b140a122d96704e32bc0f92b23f45419e8b8f478e5a05f83edcebd",
+      "license": "ISC",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/resampy/0.4.3/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "rotary-embedding-torch",
+      "version": "0.6.5",
+      "filename": "rotary_embedding_torch-0.6.5-py3-none-any.whl",
+      "size": 5454,
+      "sha256": "96c0b27b688820cbde652dd7869cf035b4f653eee53ddaf78133cf7cdd4aab19",
+      "license": "MIT",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/rotary-embedding-torch/0.6.5/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "samplerate",
+      "version": "0.1.0",
+      "filename": "samplerate-0.1.0-py2.py3-none-any.whl",
+      "size": 4028658,
+      "sha256": "f55e5c9d0a8ba3c82a53b7d9c34a2d145439c61166a7f310efaec88f2781b8f8",
+      "license": "MIT wrapper; bundled native library licences/architecture unresolved",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/samplerate/0.1.0/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "six",
+      "version": "1.17.0",
+      "filename": "six-1.17.0-py2.py3-none-any.whl",
+      "size": 11050,
+      "sha256": "4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274",
+      "license": "MIT",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/six/1.17.0/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "torchdiffeq",
+      "version": "0.2.5",
+      "filename": "torchdiffeq-0.2.5-py3-none-any.whl",
+      "size": 32902,
+      "sha256": "aa1db4bed13bd04952f28a53cdf4336d1ab60417c1d9698d7a239fec1cf2bcf8",
+      "license": "MIT original source; wheel notice audit pending",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/torchdiffeq/0.2.5/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "timm",
+      "version": "1.0.25",
+      "filename": "timm-1.0.25-py3-none-any.whl",
+      "size": 2565837,
+      "sha256": "bef7f61dd717cb2dbbb7e326f143e13d660a47ecbd84116e6fe33732bed5c484",
+      "license": "Apache-2.0",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/timm/1.0.25/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "spandrel",
+      "version": "0.4.2",
+      "filename": "spandrel-0.4.2-py3-none-any.whl",
+      "size": 320811,
+      "sha256": "6c93e3ecbeb0e548fd2df45a605472b34c1614287c56b51bb33cdef7ae5235b5",
+      "license": "MIT",
+      "environments": [
+        "art"
+      ],
+      "metadataUrl": "https://pypi.org/pypi/spandrel/0.4.2/json",
+      "alreadyCached": false,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": false
+    },
+    {
+      "name": "torchvision",
+      "version": "0.26.0+cu128",
+      "filename": "torchvision-0.26.0+cu128-cp310-cp310-win_amd64.whl",
+      "size": 8999834,
+      "sha256": "ed0770e00b96d8aa675718e20db69c740c927f027c9c8b1330251f8a973221b6",
+      "license": "BSD; cached audited official cu128",
+      "environments": [
+        "core"
+      ],
+      "metadataUrl": null,
+      "alreadyCached": true,
+      "binaryTagMetadataVerified": true,
+      "binaryBodyAudited": true
+    }
+  ],
+  "wheelClosure": {
+    "metadataOnly": true,
+    "declaredWindowsCp310ConstraintsReviewed": true,
+    "bodyAuditComplete": false,
+    "pipResolutionExecuted": false,
+    "pipCheckExecuted": false,
+    "netNewWheelBytes": 65717170,
+    "uniqueCompressedWheelBytes": 74717004,
+    "artExtensionBytes": 386449,
+    "reuse": [
+      "all current CORE/ART locked distributions",
+      "cached torchvision-0.26.0+cu128 official PyTorch wheel for CORE; ART already has it",
+      "portable FFmpeg9.0.2"
+    ],
+    "graph": {
+      "audio-separator": [
+        "beartype",
+        "diffq-fixed (win32)",
+        "einops",
+        "julius",
+        "librosa",
+        "ml-collections",
+        "numpy (baseline>=2)",
+        "onnx-weekly",
+        "onnx2torch-py313",
+        "packaging (baseline)",
+        "pydub",
+        "pyyaml (baseline)",
+        "requests (baseline)",
+        "resampy",
+        "rotary-embedding-torch",
+        "samplerate==0.1.0",
+        "scipy (baseline1.15.3)",
+        "six",
+        "soundfile (baseline0.14.0)",
+        "torch (baseline2.11.0+cu128<3)",
+        "tqdm (baseline)"
+      ],
+      "diffq-fixed": [
+        "Cython",
+        "numpy (baseline)",
+        "torch (baseline)"
+      ],
+      "librosa": [
+        "audioread",
+        "numpy (baseline)",
+        "scipy (baseline)",
+        "scikit-learn",
+        "joblib",
+        "decorator",
+        "numba",
+        "soundfile (baseline)",
+        "pooch",
+        "soxr",
+        "typing-extensions (baseline)",
+        "lazy-loader",
+        "msgpack"
+      ],
+      "numba": [
+        "llvmlite==0.44.0 (<0.45,>=0.44.0dev0)",
+        "numpy==2.2.6 (<2.3,>=1.24)"
+      ],
+      "scikit-learn": [
+        "numpy (baseline)",
+        "scipy (baseline)",
+        "joblib",
+        "threadpoolctl"
+      ],
+      "pooch": [
+        "platformdirs",
+        "packaging (baseline)",
+        "requests (baseline)"
+      ],
+      "ml-collections": [
+        "absl-py",
+        "pyyaml (baseline)"
+      ],
+      "onnx-weekly": [
+        "numpy (baseline)",
+        "protobuf (baseline7.36.2>=6.31.1)",
+        "typing-extensions (baseline)",
+        "ml-dtypes"
+      ],
+      "onnx2torch-py313": [
+        "numpy (baseline)",
+        "onnx-weekly",
+        "torch (baseline)",
+        "torchvision (cached)"
+      ],
+      "universr": [
+        "torch (baseline)",
+        "torchaudio (baseline)",
+        "torchdiffeq",
+        "einops",
+        "timm",
+        "huggingface-hub (CORE0.36.2)",
+        "pyyaml (baseline)",
+        "soundfile (baseline)",
+        "numpy (baseline)",
+        "tqdm (baseline)"
+      ],
+      "torchdiffeq": [
+        "torch (baseline)",
+        "scipy (baseline)"
+      ],
+      "timm": [
+        "torch (baseline)",
+        "torchvision (cached)",
+        "pyyaml (baseline)",
+        "huggingface-hub (CORE0.36.2)",
+        "safetensors (baseline)"
+      ],
+      "spandrel": [
+        "torch (ART baseline)",
+        "torchvision (ART baseline)",
+        "safetensors (ART baseline)",
+        "numpy (ART baseline)",
+        "einops",
+        "typing-extensions (ART baseline)"
+      ]
+    },
+    "onnxChoice": {
+      "selected": "onnx-weekly==1.24.0.dev20260928",
+      "reason": "audio-separator 0.47.0 and onnx2torch-py313 1.6.0 explicitly require distribution onnx-weekly; stable onnx 1.20.1 does NOT satisfy that distribution name. 0.45/0.46 retain weekly. Selected fixed cp310 wheel requires Python>=3.10, latest weekly20261012 requires>=3.11; no source/metadata patch proposed.",
+      "stableOnnxInstalledTogether": false,
+      "extraOrtGpu": false,
+      "reasonNoOrtGpu": "Selected RoFormer/Demucs use existing torch CUDA; CORE CPU onnxruntime remains1.23.2. No [gpu]/[dml] extra or replacement conflicting ORT files."
+    },
+    "excludedExtras": [
+      "train/dev/tests/docs extras",
+      "audioop-lts (Python<3.13)",
+      "non-Windows diffq",
+      "ONNX reference extra",
+      "universr[train]",
+      "torchcodec (soundfile/tensor inference path)",
+      "new global CUDA/cuDNN/driver",
+      "pretty-midi"
+    ]
+  },
+  "sourcePackaging": {
+    "component": "UniverSR",
+    "repo": "https://github.com/woongzip1/UniverSR",
+    "commit": "d8636623fe0c0704296239c1d3d3c5b911ecb2e0",
+    "version": "0.1.5",
+    "sourceAllGitBlobBytes": 1007960,
+    "license": "MIT",
+    "licenseUrl": "https://raw.githubusercontent.com/woongzip1/UniverSR/d8636623fe0c0704296239c1d3d3c5b911ecb2e0/LICENSE",
+    "metadataUrl": "https://raw.githubusercontent.com/woongzip1/UniverSR/d8636623fe0c0704296239c1d3d3c5b911ecb2e0/pyproject.toml",
+    "publishedWheel": false,
+    "pypiVersionEndpointStatus": 404,
+    "sourceAuditComplete": false,
+    "localWheelSha256": null,
+    "method": "After approval fetch pinned package .py/license/metadata as contained source text, verify Git blob OIDs, review entire selected code path, then build deterministic pure wheel with an owned stdlib ZIP/RECORD packager; do not run upstream setup.py/PEP517 backend or install unpinned Git. Record local wheel SHA before install/import.",
+    "packageInstallationGate": "full source review plus local wheel hash/closure receipt required; this proposal does not claim a ready binary closure for this source-only component",
+    "selectedLoader": "universr/inference.py from_pretrained local directory, torch.load(weights_only=True)",
+    "excludedLoader": "from_local uses weights_only=False; not authorized",
+    "upstreamTestEnv": "paper uv constraints torch2.7.1; broad published runtime>=2.0 accepts2.11 but actual compatibility untested; preserve current torch pins"
+  },
+  "bounds": {
+    "networkReceivedBodyCapBytes": 3000000000,
+    "networkCapIncludes": "all optional model/wheel/source/metadata bodies, retries and overlap, not just successful files; DNS/TLS/protocol overhead not byte-perfect; downloader ledger must enforce cap, no reset",
+    "maxNewDiskAllocationBytes": 5000000000,
+    "persistentModelPayloadBytes": 2229584124.0,
+    "netNewWheelBytes": 65717170,
+    "sourceTransferAllowanceBytes": 20000000,
+    "wheelUnpackedAndPipTemporaryAllowanceBytes": 1610612736,
+    "outputAndPilotAllowanceBytes": 268435456,
+    "diskReserveBytes": 53687091200,
+    "currentFreeDiskBytes": 59925880832,
+    "measuredUtc": "2026-10-12T21:34:04.0702916Z",
+    "forecastFreeAfterMaxNewAllocationBytes": 54925880832,
+    "otherJobsRemainingWritesBytes": null,
+    "diskAdmitted": false,
+    "method": "Before every artifact/install/model load: freshly query E free; subtract all not-yet-allocated OPTIONAL remaining writes + all other running jobs pending writes + transient copy/unpack/output allowances; require result>=50GiB. Count already allocated cache once, resume prefix without duplication, atomically rename on same volume; no hardlink assumption, no deleting caches/outputs without separate scope. Inspect ZIP uncompressed totals before pip to confirm allowance. Pause if unknown other pending bytes or larger footprint.",
+    "knownSuccessfulPayloadBytes": 2295301294.0,
+    "historicalAuditMetadataTransferBytes": null,
+    "historicalAuditMetadataNote": "Read-only metadata traffic not measured; no model or wheel bodies downloaded in this audit. New 3GB execution cap needs a fresh receipt/ledger at future approval, without resetting retry/body counts within that execution."
+  },
+  "stages": [
+    {
+      "id": "review-and-preflight",
+      "executionNeedsNewApproval": true,
+      "action": "Confirm this bounded scope, noncommercial licences, current source pins/lock hashes, and other pending disk writes. Build metadata-derived extension locks without altering originals.",
+      "gate": "source code, weights and wheel bodies not executed"
+    },
+    {
+      "id": "pinned-wheel-cache-audit",
+      "executionNeedsNewApproval": true,
+      "action": "Download only exact JSON-listed wheels (except cached torchvision), verify size/SHA, inspect contained ZIP/RECORD/METADATA/.pth/startup hooks/native DLL architecture/licenses, compare Requires-Dist closure with existing locked versions.",
+      "gate": "soxr and samplerate bundled licences/Windows ABI must be resolved; no upstream source build"
+    },
+    {
+      "id": "univer-source-review-and-local-wheel",
+      "executionNeedsNewApproval": true,
+      "action": "Fetch source at exact commit, static full-path audit and deterministic own pure-wheel packaging; record size/SHA before installation.",
+      "gate": "No source backend/build script execution; if reviewed wheel cannot be built safely stop component"
+    },
+    {
+      "id": "extend-core-art",
+      "executionNeedsNewApproval": true,
+      "action": "Offline hash-required no-deps wheel installation of extension-only lists into existing envs, then pip check and sequential offline import/version validation; record new installed snapshots/extension ready receipt.",
+      "gate": "old distribution versions unchanged; no GPU inference during install/import"
+    },
+    {
+      "id": "pin-models",
+      "executionNeedsNewApproval": true,
+      "action": "Receive exact model files into contained destinations, expected size and full SHA before atomic rename; retain original notices.",
+      "gate": "RoFormer original checkpoint licence scope remains unresolved; hold its weights/usage until clarified or explicitly bounded personal evaluation scope accepted; no licence claim on mirror alone"
+    },
+    {
+      "id": "sequential-pilots",
+      "executionNeedsNewApproval": true,
+      "action": "Stop own running models through root launcher, acquire exclusive GPU lease, fresh WDDM aggregate reserve/headroom and RAM/commit guard; run one bounded synthetic pilot per admitted profile and return evidence.",
+      "gate": "SheetSage native fixed300s graph needs new measured peak/admission; audio11000 blocked at supplied snapshot; no lowering gates or concurrent models"
+    }
+  ],
+  "unresolved": [
+    {
+      "component": "RoFormer checkpoint",
+      "kind": "licence",
+      "status": "hold",
+      "note": "Original TRvlvr release has empty body and null asset digest; mirror MIT declaration and separator MIT do not prove original checkpoint licence. No commercial readiness asserted."
+    },
+    {
+      "component": "samplerate0.1.0",
+      "kind": "binary licence/ABI",
+      "status": "body audit required",
+      "note": "PyPI says MIT and universal wheel; wheel includes native artifacts. Exact bundled DLL terms/architecture not inferred from wrapper licence."
+    },
+    {
+      "component": "soxr0.5.0.post1",
+      "kind": "binary licence",
+      "status": "body notices audit required",
+      "note": "PyPI licence fields null; do not infer wrapper or bundled library licence"
+    },
+    {
+      "component": "UniverSR0.1.5",
+      "kind": "source packaging",
+      "status": "full source audit/local wheel hash pending"
+    },
+    {
+      "component": "SDXL and Creator adapters",
+      "kind": "optional files",
+      "status": "excluded unresolved",
+      "reservedNetworkBytes": 0
+    },
+    {
+      "component": "SheetSage/UniverSR12GB",
+      "kind": "hardware validation",
+      "status": "not run; native peak unknown and audio gate currently blocked"
+    }
+  ],
+  "excluded": [
+    "Trainer BF16 needs20000MiB",
+    "MERT custom Python/train dependencies/weights",
+    "Krea Q4 standard12500MiB/Q8 18500MiB",
+    "Qwen standard15500-22500MiB; streamed variants not included",
+    "paid Civitai/auth-gated assets",
+    "unreviewed arbitrary adapters",
+    "LCM/unsupported sampler shortcuts",
+    "extra Writer/Listener/Whisper/SDXL weights already approved",
+    "global PATH/driver/CUDA/network/security changes",
+    "credentials or cloud inference"
+  ],
+  "audit": {
+    "whatActuallyDone": "Local committed source/lock reads, public publisher/package JSON, small README/LICENSE/source/config text; no new wheel/model bodies, imports, compilation, ML execution or GPU queries in this audit.",
+    "automaticReview": "Raw .pth text request rejected because it could download weights; command not run. Safe /api/models JSON succeeded.",
+    "completedOptionalInstallation": false
+  },
+  "models": [
+    {
+      "profile": "creator-transcriber",
+      "repo": "Serveurperso/YuE2-GGUF",
+      "revision": "64b030e3deb6e8150d2b7c0db641ef5a17eca8a3",
+      "file": "SheetSage2-Q8_0.gguf",
+      "destination": "models/SheetSage2-Q8_0.gguf",
+      "url": "https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/64b030e3deb6e8150d2b7c0db641ef5a17eca8a3/SheetSage2-Q8_0.gguf",
+      "size": 957571488,
+      "sha256": "4507d8c1d9245f312c0894ea610ab18fbcbf31443764b5bd6a60e4b6df59e973",
+      "license": "cc-by-nc-4.0"
+    },
+    {
+      "profile": "audio-upscale",
+      "repo": "woongzip1/universr-audio",
+      "revision": "1c3294844285af851b6ffa56cbde4e43cd41fc2b",
+      "file": "config.yaml",
+      "destination": "checkpoints/universr-audio/config.yaml",
+      "url": "https://huggingface.co/woongzip1/universr-audio/resolve/1c3294844285af851b6ffa56cbde4e43cd41fc2b/config.yaml",
+      "size": 533,
+      "sha256": "2e035dacc833368319f9d5ba1a34e5efd343faf749008d433e309f3c65f4dac9",
+      "license": "CC-BY-4.0 weights; MIT code"
+    },
+    {
+      "profile": "audio-upscale",
+      "repo": "woongzip1/universr-audio",
+      "revision": "1c3294844285af851b6ffa56cbde4e43cd41fc2b",
+      "file": "pytorch_model.bin",
+      "destination": "checkpoints/universr-audio/pytorch_model.bin",
+      "url": "https://huggingface.co/woongzip1/universr-audio/resolve/1c3294844285af851b6ffa56cbde4e43cd41fc2b/pytorch_model.bin",
+      "size": 229072395,
+      "sha256": "eb99f98943cc32fa82226c2da14b32b5d890416070af4946acbce442b30dc20b",
+      "license": "CC-BY-4.0 weights; MIT code"
+    },
+    {
+      "profile": "stems-vocals",
+      "repo": "Eddycrack864/Music-Source-Separation-Training",
+      "revision": "4a3768dfdd3c74104f63b9edda5b1efc8bd29f2c",
+      "file": "model_bs_roformer_ep_317_sdr_12.9755.ckpt",
+      "destination": "separation/roformer/model_bs_roformer_ep_317_sdr_12.9755.ckpt",
+      "url": "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/model_bs_roformer_ep_317_sdr_12.9755.ckpt",
+      "size": 639331213,
+      "sha256": "5b84f37e8d444c8cb30c79d77f613a41c05868ff9c9ac6c7049c00aefae115aa",
+      "license": "Original checkpoint licence scope unresolved; MIT declared by mirror and separator is insufficient",
+      "original_url": "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/model_bs_roformer_ep_317_sdr_12.9755.ckpt"
+    },
+    {
+      "profile": "stems-vocals",
+      "repo": "Eddycrack864/Music-Source-Separation-Training",
+      "revision": "4a3768dfdd3c74104f63b9edda5b1efc8bd29f2c",
+      "file": "model_bs_roformer_ep_317_sdr_12.9755.yaml",
+      "destination": "separation/roformer/model_bs_roformer_ep_317_sdr_12.9755.yaml",
+      "url": "https://huggingface.co/Eddycrack864/Music-Source-Separation-Training/resolve/4a3768dfdd3c74104f63b9edda5b1efc8bd29f2c/model_bs_roformer_ep_317_sdr_12.9755.yaml",
+      "size": 2273,
+      "sha256": "2bfdd16c656bd9519aba757cc4f8834b7ede675eb1e00ec4772d74ae1c41af7f",
+      "license": "Original checkpoint licence scope unresolved; MIT declared by mirror and separator is insufficient",
+      "original_url": "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/model_bs_roformer_ep_317_sdr_12.9755.yaml"
+    },
+    {
+      "profile": "stems-four",
+      "repo": "goldhub/Ruach_Studio_Models",
+      "revision": "bb37de868d9988d15d43291a1751356ef7574390",
+      "file": "separation/demucs/04573f0d-f3cf25b2.th",
+      "destination": "separation/demucs/04573f0d-f3cf25b2.th",
+      "url": "https://dl.fbaipublicfiles.com/demucs/hybrid_transformer/04573f0d-f3cf25b2.th",
+      "size": 84141271,
+      "sha256": "f3cf25b222c4eed7cd49dd8b2c9597d50c18bd154090f7b919cfa5f93cf22c49",
+      "license": "Demucs MIT (Meta); repository mixed-license other; use original Demucs notices",
+      "metadata_source": "https://huggingface.co/goldhub/Ruach_Studio_Models/resolve/bb37de868d9988d15d43291a1751356ef7574390/separation/demucs/04573f0d-f3cf25b2.th",
+      "source_note": "Download original Meta/UVR bytes, verified against full SHA256 from upstream unchanged mirror; mirror scheduled to disappear on 2026-10-17"
+    },
+    {
+      "profile": "stems-four",
+      "repo": "goldhub/Ruach_Studio_Models",
+      "revision": "bb37de868d9988d15d43291a1751356ef7574390",
+      "file": "separation/demucs/92cfc3b6-ef3bcb9c.th",
+      "destination": "separation/demucs/92cfc3b6-ef3bcb9c.th",
+      "url": "https://dl.fbaipublicfiles.com/demucs/hybrid_transformer/92cfc3b6-ef3bcb9c.th",
+      "size": 84141271,
+      "sha256": "ef3bcb9c8b40d14ae5d51b6db2587339cc12c6b77c0be151ce6d69002e087bf2",
+      "license": "Demucs MIT (Meta); repository mixed-license other; use original Demucs notices",
+      "metadata_source": "https://huggingface.co/goldhub/Ruach_Studio_Models/resolve/bb37de868d9988d15d43291a1751356ef7574390/separation/demucs/92cfc3b6-ef3bcb9c.th",
+      "source_note": "Download original Meta/UVR bytes, verified against full SHA256 from upstream unchanged mirror; mirror scheduled to disappear on 2026-10-17"
+    },
+    {
+      "profile": "stems-four",
+      "repo": "goldhub/Ruach_Studio_Models",
+      "revision": "bb37de868d9988d15d43291a1751356ef7574390",
+      "file": "separation/demucs/d12395a8-e57c48e6.th",
+      "destination": "separation/demucs/d12395a8-e57c48e6.th",
+      "url": "https://dl.fbaipublicfiles.com/demucs/hybrid_transformer/d12395a8-e57c48e6.th",
+      "size": 84141271,
+      "sha256": "e57c48e6b0e38af4f7118d7bd08c49f0a0c0edf7d09143bdd902ea0d237303e6",
+      "license": "Demucs MIT (Meta); repository mixed-license other; use original Demucs notices",
+      "metadata_source": "https://huggingface.co/goldhub/Ruach_Studio_Models/resolve/bb37de868d9988d15d43291a1751356ef7574390/separation/demucs/d12395a8-e57c48e6.th",
+      "source_note": "Download original Meta/UVR bytes, verified against full SHA256 from upstream unchanged mirror; mirror scheduled to disappear on 2026-10-17"
+    },
+    {
+      "profile": "stems-four",
+      "repo": "goldhub/Ruach_Studio_Models",
+      "revision": "bb37de868d9988d15d43291a1751356ef7574390",
+      "file": "separation/demucs/f7e0c4bc-ba3fe64a.th",
+      "destination": "separation/demucs/f7e0c4bc-ba3fe64a.th",
+      "url": "https://dl.fbaipublicfiles.com/demucs/hybrid_transformer/f7e0c4bc-ba3fe64a.th",
+      "size": 84141271,
+      "sha256": "ba3fe64ae8ef66ac9a4857222ce48efbdc5eb3ad375cb79dd13debee5aaa4066",
+      "license": "Demucs MIT (Meta); repository mixed-license other; use original Demucs notices",
+      "metadata_source": "https://huggingface.co/goldhub/Ruach_Studio_Models/resolve/bb37de868d9988d15d43291a1751356ef7574390/separation/demucs/f7e0c4bc-ba3fe64a.th",
+      "source_note": "Download original Meta/UVR bytes, verified against full SHA256 from upstream unchanged mirror; mirror scheduled to disappear on 2026-10-17"
+    },
+    {
+      "profile": "stems-four",
+      "repo": "goldhub/Ruach_Studio_Models",
+      "revision": "bb37de868d9988d15d43291a1751356ef7574390",
+      "file": "separation/demucs/htdemucs_ft.yaml",
+      "destination": "separation/demucs/htdemucs_ft.yaml",
+      "url": "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/htdemucs_ft.yaml",
+      "size": 149,
+      "sha256": "69470b8c1bbd674437b51bc9fb491327a10ab0396b702c93389b9cf750016346",
+      "license": "Demucs MIT (Meta); repository mixed-license other; use original Demucs notices",
+      "metadata_source": "https://huggingface.co/goldhub/Ruach_Studio_Models/resolve/bb37de868d9988d15d43291a1751356ef7574390/separation/demucs/htdemucs_ft.yaml",
+      "source_note": "Download original Meta/UVR bytes, verified against full SHA256 from upstream unchanged mirror; mirror scheduled to disappear on 2026-10-17"
+    },
+    {
+      "profile": "image-upscale",
+      "repo": "xinntao/Real-ESRGAN",
+      "revision": "v0.1.0",
+      "file": "RealESRGAN_x4plus.pth",
+      "destination": "artwork/upscalers/RealESRGAN_x4plus.pth",
+      "url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth",
+      "size": 67040989,
+      "sha256": "4fa0d38905f75ac06eb49a7951b426670021be3018265fd191d2125df9d682f1",
+      "license": "BSD-3-Clause declared upstream repository; retain original notice; original release has no per-asset licence metadata",
+      "licenseUrl": "https://raw.githubusercontent.com/xinntao/Real-ESRGAN/a4abfb2979a7bbff3f69f58f58ae324608821e27/LICENSE",
+      "metadataSource": "https://huggingface.co/api/models/lllyasviel/Annotators/revision/ee6ef4211a08a40873a0710815b682ecc98bccab?blobs=true",
+      "metadataSourceScope": "Unchanged mirror LFS full SHA only; GitHub original asset size matches, digest null. Original bytes must match this expected SHA after future approved download; no weight bytes read during audit."
+    }
+  ],
+  "auditedBaseCheckpoint": "ff5c470271057e046179e13394e710f3a67a1e8c",
+  "headAdmission": "Audit base is historical context, not a required future HEAD equality. After the parent combined checkpoint, review current relevant source/lock hashes before execution. Never require an impossible circular commit hash."
+}

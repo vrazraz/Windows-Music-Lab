@@ -11,6 +11,7 @@ from platform_runtime import run_process
 
 def to_wav(source, target, root=None):
     source, target = Path(source), Path(target)
+    source_channels = None
     try:
         incoming = wave.open(str(source), "rb")
     except (wave.Error, EOFError):
@@ -18,6 +19,7 @@ def to_wav(source, target, root=None):
     if incoming is not None:
         with incoming:
             channels, width, rate = incoming.getnchannels(), incoming.getsampwidth(), incoming.getframerate()
+            source_channels = channels
             if incoming.getcomptype() == "NONE" and channels in (1, 2) and width in (2, 3, 4) and rate == 48000:
                 expected, count = incoming.getnframes(), 0
                 with wave.open(str(target), "wb") as outgoing:
@@ -47,8 +49,21 @@ def to_wav(source, target, root=None):
                 if count != expected:
                     raise ValueError("PCM WAV is truncated")
                 return
+    if source_channels is None:
+        value = run_process(["ffprobe", "-v", "error", "-select_streams", "a:0",
+                             "-show_entries", "stream=channels", "-of", "csv=p=0", str(source)],
+                            capture_output=True, text=True, check=True, timeout=60, root=root).stdout.strip()
+        try:
+            source_channels = int(value)
+        except ValueError:
+            raise ValueError("audio source has no valid channel count") from None
+        if source_channels < 1:
+            raise ValueError("audio source has no audio channels")
+    # FFmpeg's default mono upmix attenuates each channel by 3 dB. Match the
+    # native PCM path: a mono sample is copied unchanged to both channels.
+    matrix = ["-af", "pan=stereo|c0=c0|c1=c0"] if source_channels == 1 else []
     run_process(["ffmpeg", "-v", "error", "-y", "-i", str(source), "-ar", "48000",
-                 "-ac", "2", "-c:a", "pcm_s24le", str(target)], check=True, timeout=600, root=root)
+                 "-ac", "2", *matrix, "-c:a", "pcm_s24le", str(target)], check=True, timeout=600, root=root)
 
 
 def seconds(path, root=None):

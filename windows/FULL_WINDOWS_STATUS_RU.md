@@ -10,6 +10,8 @@ WSL не требуется. Ветка не опубликована; push и P
 Реальные DSP, Whisper, Writer, короткий Listener и DAW-экспорт проверены; подробная матрица ниже.
 
 
+Новое независимое продолжение: Writer mock draft+notebook, Librarian собственные workspace/trash/restore/pin, Creator ABC/MIDI, CPU Inspect/basic Remaster и10 DAW archives проверены реально. Исправлены short WAV Inspect и mono gain DAW. SDXL ожидает «готово»; новый [пакет optional runtime](OPTIONAL_RUNTIME_APPROVAL_RU.md) пока только предложение.
+
 Подробный checkpoint каждой функции и отсутствующих компонентов: [CHECKPOINT_FULL_PORT_RU.md](CHECKPOINT_FULL_PORT_RU.md). Полный порт всех функций не объявляется готовым.
 
 ## Запуск и остановка

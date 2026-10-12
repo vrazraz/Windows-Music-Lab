@@ -18,7 +18,7 @@
     inspect_job.py AUDIO OUT.json
 """
 from pathlib import Path as _RuntimePath
-from platform_runtime import configure_runtime as _configure_runtime
+from platform_runtime import configure_runtime as _configure_runtime, process_options as _process_options
 _configure_runtime(_RuntimePath(__file__).resolve().parent.parent)
 
 import json, subprocess, sys, time
@@ -29,9 +29,11 @@ src, out = sys.argv[1], sys.argv[2]
 t0 = time.time()
 x, sr = sf.read(src, dtype="float64", always_2d=True)
 n, ch = x.shape
+if n == 0 or sr <= 0 or not np.isfinite(x).all():
+    raise SystemExit("inspection needs nonempty finite audio at a positive sample rate")
 mono = x.mean(1)
 secs = n / sr
-R = {"seconds": round(secs, 2), "rate": sr, "channels": ch}
+R = {"seconds": round(secs, 2), "rate": sr, "channels": ch, "analysis_notes": []}
 
 
 def t(i):
@@ -44,6 +46,10 @@ def t(i):
 N, HOP = 16384, 8192
 win = np.hanning(N)
 frames = max(1, (n - N) // HOP + 1)
+# A valid short clip still has one zero-padded STFT; retain the true duration.
+tone_signal = np.pad(mono, (0, max(0, N - n)))
+if n < N:
+    R["analysis_notes"].append("tone STFT zero-padded: clip shorter than one16384sample window; persistence/resolution are limited")
 F = np.fft.rfftfreq(N, 1 / sr)
 G = np.geomspace(30, min(20000, sr / 2 - 1), 4096)
 half = int(round(4096 * (1 / 6) / np.log2(G[-1] / G[0])))        # 1/6 octave in grid points
@@ -51,7 +57,7 @@ from numpy.lib.stride_tricks import sliding_window_view
 stand = np.zeros(len(G)); level = np.zeros(len(G)); count = 0
 for s in range(0, frames, 32):
     e = min(frames, s + 32)
-    seg = mono[np.arange(N)[None, :] + HOP * np.arange(s, e)[:, None]] * win
+    seg = tone_signal[np.arange(N)[None, :] + HOP * np.arange(s, e)[:, None]] * win
     db = 20 * np.log10(np.abs(np.fft.rfft(seg, axis=1)) + 1e-12)
     for row in db:
         g = np.interp(G, F, row)
@@ -91,7 +97,9 @@ blk = int(0.05 * sr)
 nb = len(d2) // blk
 local = np.median(d2[:nb * blk].reshape(nb, blk), axis=1) + 1e-9
 ratio = d2[:nb * blk].reshape(nb, blk) / local[:, None]
-cand = np.argwhere(ratio > 40)
+# A mono null from24bit antiphase channels can leave only sub-LSB rounding.
+# Its near-zero median must not turn that inaudible residue into dozens of clicks.
+cand = np.argwhere((ratio > 40) & (d2[:nb * blk].reshape(nb, blk) > 2.0 / 2**23))
 clicks = []
 for b, j in cand:
     i = b * blk + j
@@ -161,35 +169,50 @@ def buzz(seg):
     X[(f < 4000) | (f >= 12000)] = 0
     env = np.abs(np.fft.irfft(X, len(seg)))
     d = max(1, sr // 2000); env = env[: len(env) // d * d].reshape(-1, d).mean(1); fs = sr / d
+    # Narrow25Hz harmonic bands cannot be resolved in a tiny clip. No fabricated0dB.
+    if len(env) < 2 or fs / len(env) > 1.2:
+        return [None] * 6
     env = env - env.mean()
     E = np.abs(np.fft.rfft(env * np.hanning(len(env)))); fe = np.fft.rfftfreq(len(env), 1 / fs)
     vals = []
     for target in (25, 50, 75, 100, 125, 150):
         at = (fe > target - 0.6) & (fe < target + 0.6)
         ref = ((fe > target - 8) & (fe < target - 2)) | ((fe > target + 2) & (fe < target + 8))
-        vals.append(float(20 * np.log10(E[at].max() / (np.median(E[ref]) + 1e-20) + 1e-20)))
+        vals.append(float(20 * np.log10(E[at].max() / (np.median(E[ref]) + 1e-20) + 1e-20))
+                    if at.any() and ref.any() else None)
     return vals
 wins = []
 for a in range(0, max(1, int(secs) - 29), 30):
     v = buzz(mono[int(a * sr):int((a + 30) * sr)])
-    wins.append({"at": a, "by_hz": [round(q, 1) for q in v], "mean_db": round(float(np.mean(v)), 1)})
-R["framebuzz"] = {"hz": [25, 50, 75, 100, 125, 150], "windows": wins,
-                  "mean_db": round(float(np.mean([w["mean_db"] for w in wins])), 1) if wins else None,
-                  "worst": sorted(wins, key=lambda w: -w["mean_db"])[:3]}
+    valid = [q for q in v if q is not None]
+    wins.append({"at": a, "by_hz": [round(q, 1) if q is not None else None for q in v],
+                 "mean_db": round(float(np.mean(valid)), 1) if valid else None})
+resolved = [w for w in wins if w["mean_db"] is not None]
+R["framebuzz"] = {"hz": [25, 50, 75, 100, 125, 150], "windows": resolved,
+                  "unresolved_windows": [w for w in wins if w["mean_db"] is None],
+                  "mean_db": round(float(np.mean([w["mean_db"] for w in resolved])), 1) if resolved else None,
+                  "worst": sorted(resolved, key=lambda w: -w["mean_db"])[:3]}
+if len(resolved) < len(wins):
+    R["analysis_notes"].append("framebuzz unavailable for a short window with insufficient frequency resolution")
 
 # ---- loudness (ffmpeg ebur128)
 p = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", src, "-af", "ebur128=peak=true:framelog=quiet", "-f", "null", "-"],
-                   capture_output=True, text=True, encoding="utf-8", errors="replace")
+                   capture_output=True, text=True, encoding="utf-8", errors="replace",
+                   stdin=subprocess.DEVNULL, timeout=120, **_process_options())
+if p.returncode != 0:
+    raise SystemExit("inspection loudness measurement failed: " + p.stderr[-1200:])
 lo = {}
 for line in p.stderr.splitlines():
     s = line.strip()
     for key, tag in (("I:", "lufs"), ("LRA:", "lra"), ("Peak:", "true_peak")):
         if s.startswith(key) and ("LUFS" in s or "LU" in s or "dBFS" in s):
             try:
-                lo[tag] = float(s.split()[1])
+                value = float(s.split()[1])
+                lo[tag] = value if np.isfinite(value) else None
             except (ValueError, IndexError):
                 pass
 R["loudness"] = lo
 R["took"] = round(time.time() - t0, 1)
-json.dump(R, open(out, "w"), ensure_ascii=False)
+with open(out, "w", encoding="utf-8") as stream:
+    json.dump(R, stream, ensure_ascii=False, allow_nan=False)
 print(json.dumps({"ok": True, "took": R["took"]}))

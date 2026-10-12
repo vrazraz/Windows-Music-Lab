@@ -15,7 +15,7 @@ The suite covers native `.venv\Scripts\python.exe`, llama.cpp `.exe` discovery f
 | Module | Windows code | Real model processing verified here |
 | --- | --- | --- |
 | Spectrum / Debuzz | Process-local cache/DLL setup; native paths; WAV reader closes before return | Approved installed environment; real Spectrum payload and synthetic Debuzz processing passed in root validation |
-| Remaster / Inspect | FFmpeg argument lists; UTF-8 subprocess decoding; cross-volume hard-link copy fallback | FFmpeg verified in separate DAW codec/export test; actual Remaster/Debunker/Inspect workers not executed |
+| Remaster / Inspect | Native FFmpeg, short-clip STFT and sub-LSB click fixes | Real CPU Inspect8s+100ms; basic Remaster6→4.000s stereo48kPCM24 WAV/FLAC,−18.03LUFS/−14.84dBTP and fade/DC/metadata checks. See windows/REFINER_INDEPENDENT_RU.md; full Debunker/deess/432Hz/stem mix remain unverified |
 | Whisper / karaoke / text trimming | Local model only, Unicode JSON, CUDA DLL search | Actual CUDA synthetic Whisper speech/word timings passed; karaoke alignment/LRC/SRT and text trimming not executed |
 | Stems | All Roformer/Demucs weights and YAML required locally; process network guard | Validation core does NOT contain audio-separator; separation package/closure and all optional weights are absent/unapproved; inference unverified |
 | UniverSR | Required local `config.yaml` + `pytorch_model.bin`; no implicit Hub download | Pending approved pinned code + weights |
