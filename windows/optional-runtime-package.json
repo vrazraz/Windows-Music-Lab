@@ -32,7 +32,8 @@
       "resourceGateAtSuppliedSnapshot": "passes",
       "realWindowsInferenceVerified": false,
       "status": "dependency wheels pinned; original RoFormer checkpoint terms unresolved; no inference authorization",
-      "acceptance": "10 s synthetic stereo harmonic/percussive input, local-only Vocals/Instrumental nonempty finite FLAC, expected channels/rate/duration, recompose mixture/inspect clipping; log timing/VRAM/RAM; no quality claim on real music"
+      "acceptance": "10 s synthetic stereo harmonic/percussive input, local-only Vocals/Instrumental nonempty finite FLAC, expected channels/rate/duration, recompose mixture/inspect clipping; log timing/VRAM/RAM; no quality claim on real music",
+      "approvalScope": "minimal_active"
     },
     "stems-four": {
       "implementation": "lab/stems_job.py; RoFormer first, Demucs htdemucs_ft on instrumental",
@@ -42,7 +43,8 @@
       "resourceGateAtSuppliedSnapshot": "passes",
       "realWindowsInferenceVerified": false,
       "status": "same RoFormer licence hold; four original Meta weights pinned",
-      "acceptance": "same 10 s synthetic input; Vocals/Drums/Bass/Other files and metadata verified; verify actual native model execution not mocked resolver"
+      "acceptance": "same 10 s synthetic input; Vocals/Drums/Bass/Other files and metadata verified; verify actual native model execution not mocked resolver",
+      "approvalScope": "minimal_active"
     },
     "creator-transcriber": {
       "implementation": "existing windows/build/full-engine/yue-server.exe --transcriber models/SheetSage2-Q8_0.gguf; /transcribe",
@@ -52,7 +54,8 @@
       "resourceGateAtSuppliedSnapshot": "unmeasured native 300-second fixed window; root-owned exclusive lease/headroom required",
       "realWindowsInferenceVerified": false,
       "status": "one converted GGUF pinned; NC licence; no separate yue-transcribe.exe currently found",
-      "acceptance": "one short synthetic musical recording through local /transcribe, parse ABC event/tempo/notes and MIDI export if supported; preserve log; 300 s padded input means short audio does not prove small memory"
+      "acceptance": "one short synthetic musical recording through local /transcribe, parse ABC event/tempo/notes and MIDI export if supported; preserve log; 300 s padded input means short audio does not prove small memory",
+      "approvalScope": "deferred_not_in_this_approval"
     },
     "audio-upscale": {
       "implementation": "lab/upscale_job.py; UniverSR.from_pretrained(existing local directory), soundfile/tensor path",
@@ -62,8 +65,9 @@
       "resourceGateAtSuppliedSnapshot": "blocked",
       "idleCardPossibleFit": "12288-512=11776 MiB theoretical total; empty_fits special case requires no foreign GPU processes and current free>=11264, unvalidated here",
       "realWindowsInferenceVerified": false,
-      "status": "source review/local wheel packaging pending; model metadata pinned; no running until unchanged guard grants 11000",
-      "acceptance": "only after all guards: one 2-5 s band-limited synthetic clip, mode subtle, single seed, one channel then short stereo; output 48k finite duration, logs/peak; 20 s production chunk remains unvalidated; do not lower guard based on theory"
+      "status": "Selected inference source reviewed; deterministic local-wheel recipe pinned but not built; current VRAM gate blocked; deferred.",
+      "acceptance": "only after all guards: one 2-5 s band-limited synthetic clip, mode subtle, single seed, one channel then short stereo; output 48k finite duration, logs/peak; 20 s production chunk remains unvalidated; do not lower guard based on theory",
+      "approvalScope": "deferred_not_in_this_approval"
     },
     "image-upscale": {
       "implementation": "lab/artist_upscale.py; spandrel ModelLoader; 512 tile overlap32; official RealESRGAN_x4plus RRDBNet",
@@ -72,14 +76,16 @@
       "currentAdmittedFreeMiB": 10078,
       "resourceGateAtSuppliedSnapshot": "passes",
       "realWindowsInferenceVerified": false,
-      "status": "two new pure wheels; original model URL with pinned secondary metadata digest; restricted unpickling requires audit",
-      "acceptance": "one 256x256 synthetic raster ->1024x1024 PNG, finite RGB/channels, log loader architecture/scale/VRAM; then optionally existing local frame if still in scope"
+      "status": "Two pinned pure wheels; official RealESRGAN weight not downloaded; source loader previously reviewed; all wheel body audits/import/pilot still required.",
+      "acceptance": "one 256x256 synthetic raster ->1024x1024 PNG, finite RGB/channels, log loader architecture/scale/VRAM; then optionally existing local frame if still in scope",
+      "approvalScope": "minimal_active"
     },
     "creator-adapter": {
       "status": "optional_unresolved_excluded",
       "networkQuotaBytes": 0,
       "modelFiles": [],
-      "reason": "No reviewed pinned YuE2 adapter established against this Q8 native backbone. Existing sources.json lists third-party experimental/style adapters, not proof of compatibility/permission. Native tensor mapping and A/B need separate review."
+      "reason": "Existing adapter catalogue/loading structure is preserved and tested without foreign voice/style weights. No arbitrary adapter selected or required; network quota0. A specific user-chosen adapter would be a separate scope.",
+      "approvalScope": "deferred_not_in_this_approval"
     }
   },
   "wheels": [
@@ -96,7 +102,8 @@
       "metadataUrl": "https://pypi.org/pypi/audio-separator/0.47.0/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "beartype",
@@ -111,7 +118,8 @@
       "metadataUrl": "https://pypi.org/pypi/beartype/0.18.5/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "diffq-fixed",
@@ -126,7 +134,8 @@
       "metadataUrl": "https://pypi.org/pypi/diffq-fixed/0.2.4/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "Cython",
@@ -141,7 +150,8 @@
       "metadataUrl": "https://pypi.org/pypi/Cython/3.1.4/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "einops",
@@ -157,7 +167,8 @@
       "metadataUrl": "https://pypi.org/pypi/einops/0.8.2/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "julius",
@@ -172,7 +183,8 @@
       "metadataUrl": "https://pypi.org/pypi/julius/0.2.8/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "librosa",
@@ -187,7 +199,8 @@
       "metadataUrl": "https://pypi.org/pypi/librosa/0.10.2.post1/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "audioread",
@@ -202,7 +215,8 @@
       "metadataUrl": "https://pypi.org/pypi/audioread/3.1.0/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "numba",
@@ -217,7 +231,8 @@
       "metadataUrl": "https://pypi.org/pypi/numba/0.61.2/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "llvmlite",
@@ -232,7 +247,8 @@
       "metadataUrl": "https://pypi.org/pypi/llvmlite/0.44.0/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "scikit-learn",
@@ -247,7 +263,8 @@
       "metadataUrl": "https://pypi.org/pypi/scikit-learn/1.7.2/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "joblib",
@@ -262,7 +279,8 @@
       "metadataUrl": "https://pypi.org/pypi/joblib/1.5.2/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "threadpoolctl",
@@ -277,7 +295,8 @@
       "metadataUrl": "https://pypi.org/pypi/threadpoolctl/3.6.0/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "decorator",
@@ -292,7 +311,8 @@
       "metadataUrl": "https://pypi.org/pypi/decorator/5.2.1/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "pooch",
@@ -307,7 +327,8 @@
       "metadataUrl": "https://pypi.org/pypi/pooch/1.8.2/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "platformdirs",
@@ -322,7 +343,8 @@
       "metadataUrl": "https://pypi.org/pypi/platformdirs/4.4.0/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "soxr",
@@ -330,14 +352,18 @@
       "filename": "soxr-0.5.0.post1-cp310-cp310-win_amd64.whl",
       "size": 166881,
       "sha256": "97f269bc26937c267a2ace43a77167d0c5c8bba5a2b45863bb6042b5b50c474e",
-      "license": "wrapper/library licence scope unresolved until wheel notices audit",
+      "license": "Python-SoXR/libsoxr LGPL-2.1-or-later; bundled PFFFT/FFTPACK permissive notices retained. Redistribution source/relinking compliance not assembled.",
       "environments": [
         "core"
       ],
       "metadataUrl": "https://pypi.org/pypi/soxr/0.5.0.post1/json",
-      "alreadyCached": false,
+      "alreadyCached": true,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": true,
+      "approvalScope": "minimal_active",
+      "cacheRelativePath": "windows/cache/optional-review/88a1b1fc-a4b5-4372-bb16-e7d08d8e687b/soxr-0.5.0.post1-cp310-cp310-win_amd64.whl",
+      "bodyAuditScope": "Exact ZIP/metadata/notices/PE imports and host named exports only; no DLL loading or runtime ABI test.",
+      "bodyAuditReceipt": "windows/cache/optional-review/88a1b1fc-a4b5-4372-bb16-e7d08d8e687b/native-dll-audit.json"
     },
     {
       "name": "lazy-loader",
@@ -352,7 +378,8 @@
       "metadataUrl": "https://pypi.org/pypi/lazy-loader/0.4/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "msgpack",
@@ -367,7 +394,8 @@
       "metadataUrl": "https://pypi.org/pypi/msgpack/1.1.2/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "ml-collections",
@@ -382,7 +410,8 @@
       "metadataUrl": "https://pypi.org/pypi/ml-collections/1.1.0/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "absl-py",
@@ -397,7 +426,8 @@
       "metadataUrl": "https://pypi.org/pypi/absl-py/2.3.1/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "onnx-weekly",
@@ -412,7 +442,8 @@
       "metadataUrl": "https://pypi.org/pypi/onnx-weekly/1.24.0.dev20260928/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "ml-dtypes",
@@ -427,7 +458,8 @@
       "metadataUrl": "https://pypi.org/pypi/ml-dtypes/0.5.4/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "onnx2torch-py313",
@@ -442,7 +474,8 @@
       "metadataUrl": "https://pypi.org/pypi/onnx2torch-py313/1.6.0/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "pydub",
@@ -457,7 +490,8 @@
       "metadataUrl": "https://pypi.org/pypi/pydub/0.25.1/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "resampy",
@@ -472,7 +506,8 @@
       "metadataUrl": "https://pypi.org/pypi/resampy/0.4.3/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "rotary-embedding-torch",
@@ -487,7 +522,8 @@
       "metadataUrl": "https://pypi.org/pypi/rotary-embedding-torch/0.6.5/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "samplerate",
@@ -495,14 +531,18 @@
       "filename": "samplerate-0.1.0-py2.py3-none-any.whl",
       "size": 4028658,
       "sha256": "f55e5c9d0a8ba3c82a53b7d9c34a2d145439c61166a7f310efaec88f2781b8f8",
-      "license": "MIT wrapper; bundled native library licences/architecture unresolved",
+      "license": "Wrapper declares MIT; bundled libsamplerate0.1.9 BSD-2-Clause. Exact wrapper copyright notice required before redistribution.",
       "environments": [
         "core"
       ],
       "metadataUrl": "https://pypi.org/pypi/samplerate/0.1.0/json",
-      "alreadyCached": false,
+      "alreadyCached": true,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": true,
+      "approvalScope": "minimal_active",
+      "cacheRelativePath": "windows/cache/optional-review/88a1b1fc-a4b5-4372-bb16-e7d08d8e687b/samplerate-0.1.0-py2.py3-none-any.whl",
+      "bodyAuditScope": "Exact ZIP/metadata/notices/PE imports and host named exports only; no DLL loading or runtime ABI test.",
+      "bodyAuditReceipt": "windows/cache/optional-review/88a1b1fc-a4b5-4372-bb16-e7d08d8e687b/native-dll-audit.json"
     },
     {
       "name": "six",
@@ -517,7 +557,8 @@
       "metadataUrl": "https://pypi.org/pypi/six/1.17.0/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "torchdiffeq",
@@ -532,7 +573,8 @@
       "metadataUrl": "https://pypi.org/pypi/torchdiffeq/0.2.5/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "deferred_audio_upscale_only"
     },
     {
       "name": "timm",
@@ -547,7 +589,8 @@
       "metadataUrl": "https://pypi.org/pypi/timm/1.0.25/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "deferred_audio_upscale_only"
     },
     {
       "name": "spandrel",
@@ -562,7 +605,8 @@
       "metadataUrl": "https://pypi.org/pypi/spandrel/0.4.2/json",
       "alreadyCached": false,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": false
+      "binaryBodyAudited": false,
+      "approvalScope": "minimal_active"
     },
     {
       "name": "torchvision",
@@ -577,16 +621,17 @@
       "metadataUrl": null,
       "alreadyCached": true,
       "binaryTagMetadataVerified": true,
-      "binaryBodyAudited": true
+      "binaryBodyAudited": true,
+      "approvalScope": "minimal_active"
     }
   ],
   "wheelClosure": {
-    "metadataOnly": true,
+    "metadataOnly": false,
     "declaredWindowsCp310ConstraintsReviewed": true,
     "bodyAuditComplete": false,
     "pipResolutionExecuted": false,
     "pipCheckExecuted": false,
-    "netNewWheelBytes": 65717170,
+    "netNewWheelBytes": 61521631,
     "uniqueCompressedWheelBytes": 74717004,
     "artExtensionBytes": 386449,
     "reuse": [
@@ -699,6 +744,10 @@
         "numpy (ART baseline)",
         "einops",
         "typing-extensions (ART baseline)"
+      ],
+      "samplerate": [
+        "cffi (baseline2.1.1>=1.0.0)",
+        "numpy (baseline2.2.6)"
       ]
     },
     "onnxChoice": {
@@ -717,7 +766,21 @@
       "torchcodec (soundfile/tensor inference path)",
       "new global CUDA/cuDNN/driver",
       "pretty-midi"
-    ]
+    ],
+    "bodyAuditCount": 2,
+    "minimalActive": {
+      "uniqueWheelRecords": 31,
+      "alreadyCachedRecords": 3,
+      "notCachedRecords": 28,
+      "networkWheelBytes": 58922892,
+      "uniqueCompressedWheelBytes": 72118265,
+      "excludedAudioOnlyWheels": [
+        "timm",
+        "torchdiffeq"
+      ],
+      "cachedTorchvisionStillRequired": "onnx2torch-py3131.6.0 requires torchvision; retain CORE cached0.26.0+cu128, ART already installed",
+      "artOnlyTwoWheelsBytes": 386449
+    }
   },
   "sourcePackaging": {
     "component": "UniverSR",
@@ -730,70 +793,90 @@
     "metadataUrl": "https://raw.githubusercontent.com/woongzip1/UniverSR/d8636623fe0c0704296239c1d3d3c5b911ecb2e0/pyproject.toml",
     "publishedWheel": false,
     "pypiVersionEndpointStatus": 404,
-    "sourceAuditComplete": false,
+    "sourceAuditComplete": true,
     "localWheelSha256": null,
-    "method": "After approval fetch pinned package .py/license/metadata as contained source text, verify Git blob OIDs, review entire selected code path, then build deterministic pure wheel with an owned stdlib ZIP/RECORD packager; do not run upstream setup.py/PEP517 backend or install unpinned Git. Record local wheel SHA before install/import.",
-    "packageInstallationGate": "full source review plus local wheel hash/closure receipt required; this proposal does not claim a ready binary closure for this source-only component",
+    "method": "Pinned source already fetched as text and selected path reviewed. Future separate approval: package the nine manifest-listed source files and notices with an owned deterministic stdlib ZIP/RECORD builder; no upstream build backend. Record local wheel size/SHA and verify declared closure before offline install/import.",
+    "packageInstallationGate": "Future local wheel hash/closure receipt plus explicit separate audio-upscale approval; no ready binary/import/runtime claim.",
     "selectedLoader": "universr/inference.py from_pretrained local directory, torch.load(weights_only=True)",
     "excludedLoader": "from_local uses weights_only=False; not authorized",
-    "upstreamTestEnv": "paper uv constraints torch2.7.1; broad published runtime>=2.0 accepts2.11 but actual compatibility untested; preserve current torch pins"
+    "upstreamTestEnv": "paper uv constraints torch2.7.1; broad published runtime>=2.0 accepts2.11 but actual compatibility untested; preserve current torch pins",
+    "sourceAuditScope": "Selected inference import/call path only; upstream training/remote/from_local APIs excluded.",
+    "sourceAuditReceipt": "windows/cache/optional-review/sources-19ca8abed9/selected-source-audit.json",
+    "sourceAuditReceiptSha256": "33d4a255ff1a1ec8d35b02de5c28b0dda9ac2973058501c285dfae29d303d955",
+    "localWheelBuilt": false,
+    "approvalScope": "deferred_audio_upscale_only",
+    "resourcesReviewed": {
+      "upstreamDefault": "enhance: midpoint,4 steps,CFG1.5; minimum32768 samples;48kHz output",
+      "solver": "odeint materializes all ode_steps+1 output states, then clones final state; CFG evaluates guided and unguided forward paths.",
+      "existingWorker": "20s chunks,1s overlap,channels sequentially; upstream 3090 ~10GB comment is not a measured Windows3060 result.",
+      "unchangedGateMiB": 11000,
+      "suppliedAdmittedFreeMiB": 10078,
+      "admissionAtSuppliedSnapshot": false,
+      "absolute24GBRequirementEstablished": false,
+      "needsNewApproval": "local wheel build/install/import, fresh exclusive GPU/RAM/commit admission, short synthetic pilot and later 20s peak; no lowering guard"
+    }
   },
   "bounds": {
-    "networkReceivedBodyCapBytes": 3000000000,
+    "networkReceivedBodyCapBytes": 1500000000,
     "networkCapIncludes": "all optional model/wheel/source/metadata bodies, retries and overlap, not just successful files; DNS/TLS/protocol overhead not byte-perfect; downloader ledger must enforce cap, no reset",
-    "maxNewDiskAllocationBytes": 5000000000,
-    "persistentModelPayloadBytes": 2229584124.0,
-    "netNewWheelBytes": 65717170,
+    "maxNewDiskAllocationBytes": 3500000000,
+    "persistentModelPayloadBytes": 1042939708,
+    "netNewWheelBytes": 58922892,
     "sourceTransferAllowanceBytes": 20000000,
     "wheelUnpackedAndPipTemporaryAllowanceBytes": 1610612736,
     "outputAndPilotAllowanceBytes": 268435456,
     "diskReserveBytes": 53687091200,
-    "currentFreeDiskBytes": 59925880832,
-    "measuredUtc": "2026-10-12T21:34:04.0702916Z",
-    "forecastFreeAfterMaxNewAllocationBytes": 54925880832,
+    "currentFreeDiskBytes": 59797303296,
+    "measuredUtc": "2026-10-12T22:29:41.154855+00:00",
+    "forecastFreeAfterMaxNewAllocationBytes": 56297303296,
     "otherJobsRemainingWritesBytes": null,
     "diskAdmitted": false,
     "method": "Before every artifact/install/model load: freshly query E free; subtract all not-yet-allocated OPTIONAL remaining writes + all other running jobs pending writes + transient copy/unpack/output allowances; require result>=50GiB. Count already allocated cache once, resume prefix without duplication, atomically rename on same volume; no hardlink assumption, no deleting caches/outputs without separate scope. Inspect ZIP uncompressed totals before pip to confirm allowance. Pause if unknown other pending bytes or larger footprint.",
-    "knownSuccessfulPayloadBytes": 2295301294.0,
+    "knownSuccessfulPayloadBytes": 1101862600,
     "historicalAuditMetadataTransferBytes": null,
-    "historicalAuditMetadataNote": "Read-only metadata traffic not measured; no model or wheel bodies downloaded in this audit. New 3GB execution cap needs a fresh receipt/ledger at future approval, without resetting retry/body counts within that execution."
+    "historicalAuditMetadataNote": "Earlier general metadata traffic was not fully measured. Later static audit received two small wheel bodies and licence/API metadata (native receipt4227343 B) and selected pinned source/API text (source receipt302299 B). No model bodies/install/import/ML executed. Future1.5GB execution cap starts with a new ledger, counts every received body/retry during that execution without resets; cached files are reused only after SHA verification.",
+    "historicalAllOptionalProposal": {
+      "networkReceivedBodyCapBytes": 3000000000,
+      "maxNewDiskAllocationBytes": 5000000000,
+      "persistentModelPayloadBytes": 2229584124.0,
+      "netNewWheelBytes": 65717170,
+      "knownSuccessfulPayloadBytes": 2295301294.0,
+      "currentFreeDiskBytes": 59925880832,
+      "measuredUtc": "2026-10-12T21:34:04.0702916Z"
+    },
+    "scope": "minimal active stems and image-upscale only; deferred entries cannot consume this approval",
+    "alreadyAllocatedReuseWheelBytes": 13195373
   },
   "stages": [
     {
-      "id": "review-and-preflight",
+      "id": "fresh-preflight",
       "executionNeedsNewApproval": true,
-      "action": "Confirm this bounded scope, noncommercial licences, current source pins/lock hashes, and other pending disk writes. Build metadata-derived extension locks without altering originals.",
-      "gate": "source code, weights and wheel bodies not executed"
+      "action": "Resolve active profiles/terms; review current source and baseline lock hashes; fresh E free minus remaining3.5GB cap and known other pending writes must retain50GiB.",
+      "gate": "No optional installation or ML authorized by this static review; stop if other pending writes are unknown."
     },
     {
-      "id": "pinned-wheel-cache-audit",
+      "id": "minimal-pinned-wheel-audit",
       "executionNeedsNewApproval": true,
-      "action": "Download only exact JSON-listed wheels (except cached torchvision), verify size/SHA, inspect contained ZIP/RECORD/METADATA/.pth/startup hooks/native DLL architecture/licenses, compare Requires-Dist closure with existing locked versions.",
-      "gate": "soxr and samplerate bundled licences/Windows ABI must be resolved; no upstream source build"
+      "action": "Resolve exact filenames+sizes+SHA from primary PyPI metadata; receive only28 missing minimal wheels with quota ledger; reuse cached2 small audited wheels and official torchvision after SHA verification. Generate separate hash-required download/extension locks; no original lock changes.",
+      "gate": "ZIP/RECORD/METADATA/.pth/startup/native/library/loader audit for every remaining wheel; no source builds, no timm/torchdiffeq/UniverSR/train extras."
     },
     {
-      "id": "univer-source-review-and-local-wheel",
+      "id": "minimal-offline-extension",
       "executionNeedsNewApproval": true,
-      "action": "Fetch source at exact commit, static full-path audit and deterministic own pure-wheel packaging; record size/SHA before installation.",
-      "gate": "No source backend/build script execution; if reviewed wheel cannot be built safely stop component"
+      "action": "Offline no-deps hash-required binary-only extension install into current CORE/ART; sequential pip check/version/imports with offline guard; retain all pre-existing distribution versions and separate snapshots.",
+      "gate": "No GPU model execution during install/import; on conflicts stop instead of replacing Torch/NumPy/CUDA."
     },
     {
-      "id": "extend-core-art",
+      "id": "minimal-models",
       "executionNeedsNewApproval": true,
-      "action": "Offline hash-required no-deps wheel installation of extension-only lists into existing envs, then pip check and sequential offline import/version validation; record new installed snapshots/extension ready receipt.",
-      "gate": "old distribution versions unchanged; no GPU inference during install/import"
+      "action": "Download only8 active model/config files after applicable licence gates; quota ledger, exact full SHA/size before atomic same-volume rename, preserve original notices; no auto downloads.",
+      "gate": "RoFormer and dependent4-stem pilot remain held unless terms clarified or explicit bounded personal acknowledgment obtained; image model can proceed independently."
     },
     {
-      "id": "pin-models",
+      "id": "minimal-sequential-pilots",
       "executionNeedsNewApproval": true,
-      "action": "Receive exact model files into contained destinations, expected size and full SHA before atomic rename; retain original notices.",
-      "gate": "RoFormer original checkpoint licence scope remains unresolved; hold its weights/usage until clarified or explicitly bounded personal evaluation scope accepted; no licence claim on mirror alone"
-    },
-    {
-      "id": "sequential-pilots",
-      "executionNeedsNewApproval": true,
-      "action": "Stop own running models through root launcher, acquire exclusive GPU lease, fresh WDDM aggregate reserve/headroom and RAM/commit guard; run one bounded synthetic pilot per admitted profile and return evidence.",
-      "gate": "SheetSage native fixed300s graph needs new measured peak/admission; audio11000 blocked at supplied snapshot; no lowering gates or concurrent models"
+      "action": "Stop only own running models, exclusive GPU lease and fresh VRAM/RAM/commit/disk admission; one synthetic256px image4x pilot, then10s stereo2/4stem pilots if licence/admission allow. Record output/peak/timing/failures.",
+      "gate": "Image4000/stems8000MiB gates unchanged; no parallel models, no inference for deferred profiles; no lowering resource guards."
     }
   ],
   "unresolved": [
@@ -801,34 +884,40 @@
       "component": "RoFormer checkpoint",
       "kind": "licence",
       "status": "hold",
-      "note": "Original TRvlvr release has empty body and null asset digest; mirror MIT declaration and separator MIT do not prove original checkpoint licence. No commercial readiness asserted."
+      "note": "Original TRvlvr release body is empty; repository licence not supplied. Mirror MIT and separator MIT do not prove original Viperx checkpoint terms. Stop model download/use until terms clarified or explicit human bounded personal evaluation acknowledgment; no commercial rights asserted."
+    },
+    {
+      "component": "Remaining minimal wheels",
+      "kind": "body audit/runtime",
+      "status": "not yet downloaded or executed",
+      "note": "Only two exact wheel bodies were statically reviewed; cached torchvision provenance retained. Remaining bodies need ZIP/RECORD/METADATA/startup/loader/native notices audit, offline pip check/imports; preserve all baseline versions. Numba/llvmlite/ONNX/diffq native imports and actual checkpoint loaders still untested."
     },
     {
       "component": "samplerate0.1.0",
-      "kind": "binary licence/ABI",
-      "status": "body audit required",
-      "note": "PyPI says MIT and universal wheel; wheel includes native artifacts. Exact bundled DLL terms/architecture not inferred from wrapper licence."
+      "kind": "runtime path/redistribution",
+      "status": "static ABI and native terms identified",
+      "note": "libsamplerate0.1.9 BSD2; wrapper declares MIT, exact wrapper copyright notice absent wheel. Future import must assert approved bundled AMD64 DLL rather than find_library global candidate. CFFI/NumPy runtime and resampling not tested; redistribution notice hold is distinct from local installation."
     },
     {
       "component": "soxr0.5.0.post1",
-      "kind": "binary licence",
-      "status": "body notices audit required",
-      "note": "PyPI licence fields null; do not infer wrapper or bundled library licence"
+      "kind": "runtime/redistribution",
+      "status": "static ABI and bundled licences identified",
+      "note": "LGPL2.1+ wrapper/libsoxr; PFFFT notice retained. No NumPy2 runtime/resampling test. Public binary redistribution requires applicable corresponding source/replacement/relinking obligations; offer not assembled."
     },
     {
       "component": "UniverSR0.1.5",
-      "kind": "source packaging",
-      "status": "full source audit/local wheel hash pending"
+      "kind": "deferred source packaging/hardware",
+      "status": "selected source audit complete; local wheel hash and runtime compatibility pending; unchanged11000MiB gate fails supplied10078MiB snapshot"
     },
     {
-      "component": "SheetSage/UniverSR12GB",
-      "kind": "hardware validation",
-      "status": "not run; native peak unknown and audio gate currently blocked"
+      "component": "SheetSage",
+      "kind": "deferred hardware validation",
+      "status": "fixed300s native window, peak unknown; CC-BY-NC4.0 weights; no pilot"
     },
     {
       "component": "Creator adapters",
       "kind": "optional files",
-      "status": "catalogue is not an obligation to download; external voice/style weights not selected",
+      "status": "catalogue/loading structure preserved; no external voice/style weights required",
       "reservedNetworkBytes": 0
     }
   ],
@@ -840,14 +929,22 @@
     "paid Civitai/auth-gated assets",
     "unreviewed arbitrary adapters",
     "LCM/unsupported sampler shortcuts",
-    "extra Writer/Listener/Whisper/SDXL weights already approved",
     "global PATH/driver/CUDA/network/security changes",
-    "credentials or cloud inference"
+    "credentials or cloud inference",
+    "new Writer/Listener/Whisper downloads",
+    "SDXL removed by user; no active profile/inference/download/test",
+    "SheetSage and UniverSR downloads/install/pilots deferred from minimal approval"
   ],
   "audit": {
-    "whatActuallyDone": "Local committed source/lock reads, public publisher/package JSON, small README/LICENSE/source/config text; no new wheel/model bodies, imports, compilation, ML execution or GPU queries in this audit.",
+    "whatActuallyDone": "Read local committed source/locks and public metadata/text. Two exact small wheel bodies were ZIP/PE/notices audited and selected UniverSR inference source was fully read/AST-parsed as text. No fetched vendor code imports, DLL loads, compilation, installation, model bodies, GPU queries or optional inference executed.",
     "automaticReview": "Raw .pth text request rejected because it could download weights; command not run. Safe /api/models JSON succeeded.",
-    "completedOptionalInstallation": false
+    "completedOptionalInstallation": false,
+    "staticNativeAuditReceipt": "windows/cache/optional-review/88a1b1fc-a4b5-4372-bb16-e7d08d8e687b/native-dll-audit.json",
+    "staticNativeAuditSha256": "73d5ef5c6d4b6f0a9f04c3e84f101223f960a4d9d1d0be96c4625b2dbde03f9d",
+    "selectedSourceAuditReceipt": "windows/cache/optional-review/sources-19ca8abed9/selected-source-audit.json",
+    "selectedSourceAuditSha256": "33d4a255ff1a1ec8d35b02de5c28b0dda9ac2973058501c285dfae29d303d955",
+    "researchStopped": true,
+    "completedUtc": "2026-10-12T22:29:41.154855+00:00"
   },
   "models": [
     {
@@ -859,7 +956,9 @@
       "url": "https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/64b030e3deb6e8150d2b7c0db641ef5a17eca8a3/SheetSage2-Q8_0.gguf",
       "size": 957571488,
       "sha256": "4507d8c1d9245f312c0894ea610ab18fbcbf31443764b5bd6a60e4b6df59e973",
-      "license": "cc-by-nc-4.0"
+      "license": "cc-by-nc-4.0",
+      "approvalScope": "deferred_not_in_this_approval",
+      "downloadOrExecutionApproved": false
     },
     {
       "profile": "audio-upscale",
@@ -870,7 +969,9 @@
       "url": "https://huggingface.co/woongzip1/universr-audio/resolve/1c3294844285af851b6ffa56cbde4e43cd41fc2b/config.yaml",
       "size": 533,
       "sha256": "2e035dacc833368319f9d5ba1a34e5efd343faf749008d433e309f3c65f4dac9",
-      "license": "CC-BY-4.0 weights; MIT code"
+      "license": "CC-BY-4.0 weights; MIT code",
+      "approvalScope": "deferred_not_in_this_approval",
+      "downloadOrExecutionApproved": false
     },
     {
       "profile": "audio-upscale",
@@ -881,7 +982,9 @@
       "url": "https://huggingface.co/woongzip1/universr-audio/resolve/1c3294844285af851b6ffa56cbde4e43cd41fc2b/pytorch_model.bin",
       "size": 229072395,
       "sha256": "eb99f98943cc32fa82226c2da14b32b5d890416070af4946acbce442b30dc20b",
-      "license": "CC-BY-4.0 weights; MIT code"
+      "license": "CC-BY-4.0 weights; MIT code",
+      "approvalScope": "deferred_not_in_this_approval",
+      "downloadOrExecutionApproved": false
     },
     {
       "profile": "stems-vocals",
@@ -893,7 +996,10 @@
       "size": 639331213,
       "sha256": "5b84f37e8d444c8cb30c79d77f613a41c05868ff9c9ac6c7049c00aefae115aa",
       "license": "Original checkpoint licence scope unresolved; MIT declared by mirror and separator is insufficient",
-      "original_url": "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/model_bs_roformer_ep_317_sdr_12.9755.ckpt"
+      "original_url": "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/model_bs_roformer_ep_317_sdr_12.9755.ckpt",
+      "approvalScope": "minimal_active",
+      "downloadOrExecutionApproved": false,
+      "originalCheckpointLicenseHold": true
     },
     {
       "profile": "stems-vocals",
@@ -905,7 +1011,10 @@
       "size": 2273,
       "sha256": "2bfdd16c656bd9519aba757cc4f8834b7ede675eb1e00ec4772d74ae1c41af7f",
       "license": "Original checkpoint licence scope unresolved; MIT declared by mirror and separator is insufficient",
-      "original_url": "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/model_bs_roformer_ep_317_sdr_12.9755.yaml"
+      "original_url": "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/model_bs_roformer_ep_317_sdr_12.9755.yaml",
+      "approvalScope": "minimal_active",
+      "downloadOrExecutionApproved": false,
+      "originalCheckpointLicenseHold": true
     },
     {
       "profile": "stems-four",
@@ -918,7 +1027,9 @@
       "sha256": "f3cf25b222c4eed7cd49dd8b2c9597d50c18bd154090f7b919cfa5f93cf22c49",
       "license": "Demucs MIT (Meta); repository mixed-license other; use original Demucs notices",
       "metadata_source": "https://huggingface.co/goldhub/Ruach_Studio_Models/resolve/bb37de868d9988d15d43291a1751356ef7574390/separation/demucs/04573f0d-f3cf25b2.th",
-      "source_note": "Download original Meta/UVR bytes, verified against full SHA256 from upstream unchanged mirror; mirror scheduled to disappear on 2026-10-17"
+      "source_note": "Download original Meta/UVR bytes, verified against full SHA256 from upstream unchanged mirror; mirror scheduled to disappear on 2026-10-17",
+      "approvalScope": "minimal_active",
+      "downloadOrExecutionApproved": false
     },
     {
       "profile": "stems-four",
@@ -931,7 +1042,9 @@
       "sha256": "ef3bcb9c8b40d14ae5d51b6db2587339cc12c6b77c0be151ce6d69002e087bf2",
       "license": "Demucs MIT (Meta); repository mixed-license other; use original Demucs notices",
       "metadata_source": "https://huggingface.co/goldhub/Ruach_Studio_Models/resolve/bb37de868d9988d15d43291a1751356ef7574390/separation/demucs/92cfc3b6-ef3bcb9c.th",
-      "source_note": "Download original Meta/UVR bytes, verified against full SHA256 from upstream unchanged mirror; mirror scheduled to disappear on 2026-10-17"
+      "source_note": "Download original Meta/UVR bytes, verified against full SHA256 from upstream unchanged mirror; mirror scheduled to disappear on 2026-10-17",
+      "approvalScope": "minimal_active",
+      "downloadOrExecutionApproved": false
     },
     {
       "profile": "stems-four",
@@ -944,7 +1057,9 @@
       "sha256": "e57c48e6b0e38af4f7118d7bd08c49f0a0c0edf7d09143bdd902ea0d237303e6",
       "license": "Demucs MIT (Meta); repository mixed-license other; use original Demucs notices",
       "metadata_source": "https://huggingface.co/goldhub/Ruach_Studio_Models/resolve/bb37de868d9988d15d43291a1751356ef7574390/separation/demucs/d12395a8-e57c48e6.th",
-      "source_note": "Download original Meta/UVR bytes, verified against full SHA256 from upstream unchanged mirror; mirror scheduled to disappear on 2026-10-17"
+      "source_note": "Download original Meta/UVR bytes, verified against full SHA256 from upstream unchanged mirror; mirror scheduled to disappear on 2026-10-17",
+      "approvalScope": "minimal_active",
+      "downloadOrExecutionApproved": false
     },
     {
       "profile": "stems-four",
@@ -957,7 +1072,9 @@
       "sha256": "ba3fe64ae8ef66ac9a4857222ce48efbdc5eb3ad375cb79dd13debee5aaa4066",
       "license": "Demucs MIT (Meta); repository mixed-license other; use original Demucs notices",
       "metadata_source": "https://huggingface.co/goldhub/Ruach_Studio_Models/resolve/bb37de868d9988d15d43291a1751356ef7574390/separation/demucs/f7e0c4bc-ba3fe64a.th",
-      "source_note": "Download original Meta/UVR bytes, verified against full SHA256 from upstream unchanged mirror; mirror scheduled to disappear on 2026-10-17"
+      "source_note": "Download original Meta/UVR bytes, verified against full SHA256 from upstream unchanged mirror; mirror scheduled to disappear on 2026-10-17",
+      "approvalScope": "minimal_active",
+      "downloadOrExecutionApproved": false
     },
     {
       "profile": "stems-four",
@@ -970,7 +1087,9 @@
       "sha256": "69470b8c1bbd674437b51bc9fb491327a10ab0396b702c93389b9cf750016346",
       "license": "Demucs MIT (Meta); repository mixed-license other; use original Demucs notices",
       "metadata_source": "https://huggingface.co/goldhub/Ruach_Studio_Models/resolve/bb37de868d9988d15d43291a1751356ef7574390/separation/demucs/htdemucs_ft.yaml",
-      "source_note": "Download original Meta/UVR bytes, verified against full SHA256 from upstream unchanged mirror; mirror scheduled to disappear on 2026-10-17"
+      "source_note": "Download original Meta/UVR bytes, verified against full SHA256 from upstream unchanged mirror; mirror scheduled to disappear on 2026-10-17",
+      "approvalScope": "minimal_active",
+      "downloadOrExecutionApproved": false
     },
     {
       "profile": "image-upscale",
@@ -984,12 +1103,32 @@
       "license": "BSD-3-Clause declared upstream repository; retain original notice; original release has no per-asset licence metadata",
       "licenseUrl": "https://raw.githubusercontent.com/xinntao/Real-ESRGAN/a4abfb2979a7bbff3f69f58f58ae324608821e27/LICENSE",
       "metadataSource": "https://huggingface.co/api/models/lllyasviel/Annotators/revision/ee6ef4211a08a40873a0710815b682ecc98bccab?blobs=true",
-      "metadataSourceScope": "Unchanged mirror LFS full SHA only; GitHub original asset size matches, digest null. Original bytes must match this expected SHA after future approved download; no weight bytes read during audit."
+      "metadataSourceScope": "Unchanged mirror LFS full SHA only; GitHub original asset size matches, digest null. Original bytes must match this expected SHA after future approved download; no weight bytes read during audit.",
+      "approvalScope": "minimal_active",
+      "downloadOrExecutionApproved": false
     }
   ],
   "auditedBaseCheckpoint": "ff5c470271057e046179e13394e710f3a67a1e8c",
   "headAdmission": "Audit base is historical context, not a required future HEAD equality. After the parent combined checkpoint, review current relevant source/lock hashes before execution. Never require an impossible circular commit hash.",
   "removedByUser": [
     "SDXL integration, profile and pending image test"
-  ]
+  ],
+  "approvalScope": {
+    "activeProfiles": [
+      "image-upscale",
+      "stems-four",
+      "stems-vocals"
+    ],
+    "deferredProfiles": [
+      "audio-upscale",
+      "creator-adapter",
+      "creator-transcriber"
+    ],
+    "sdxlRemoved": true,
+    "weightsNotDeleted": true,
+    "request": "One new bounded authorization for remaining pinned wheels, offline extension install/checks, official image-upscale model/pilot and gated stems. RoFormer weights/use remain held until original terms clarified or human explicitly accepts the unresolved terms for bounded personal evaluation; this is not a grant of rights. Image-upscale may finish independently if stems remain held.",
+    "noAutomaticInference": true,
+    "noAutomaticModelDownload": true,
+    "noCredentialsCloudGlobalChanges": true
+  }
 }

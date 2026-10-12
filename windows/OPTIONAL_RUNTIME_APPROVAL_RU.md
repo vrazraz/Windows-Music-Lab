@@ -1,97 +1,75 @@
-# Дополнения Ruach Studio: пакет согласования Windows / RTX 3060 12 ГБ
+# Необязательные функции Ruach Studio: минимальный пакет Windows
 
-**Это предложение, а не выполненная установка.** Проект: `E:\Projects\Ruach_Studio\full-windows-port`; аудитная база `ff5c470271057e046179e13394e710f3a67a1e8c`. Полный список: [optional-runtime-package.json](optional-runtime-package.json). Сейчас прочитаны реальные locks, локальный код, публичные JSON, небольшие исходники/лицензии/config. Новые модели и wheel bodies не скачивались; imports, сборка, GPU-запросы и инференс не выполнялись.
+Проект: `E:\Projects\Ruach_Studio\full-windows-port`. Это **готовый запрос на отдельное разрешение**, а не выполненная установка. SDXL снят отдельным commit `3791c177c9f34eee6444a29af1aa7959332aa6d2`; его тест и memory-ready ожидание отменены. Другие модули сохранены. Точный каталог URL, размеров и SHA: [optional-runtime-package.json](optional-runtime-package.json). Поля `approvalScope` отделяют предлагаемые файлы от отложенных; наличие pin не разрешает загрузку.
 
-Предлагается **одно ограниченное разрешение на последовательные этапы ниже**: максимум **3 000 000 000 байт HTTP-тел** с повторами/частями; максимум **5 000 000 000 байт новых выделений E:**; всегда сохранить **50 ГиБ = 53 687 091 200 байт** после учёта оставшихся записей всех задач. Никаких секретов, новых аккаунтов, платных сервисов, облачного инференса, глобальных PATH/CUDA/драйверов/защиты/сети. Неподтверждённые части не становятся готовыми от одного разрешения.
+Предлагается один последовательный этап: stems и увеличение изображений. Предел **1 500 000 000 B полученных HTTP-тел**, включая повторные попытки и metadata; **3 500 000 000 B новых выделений на E:**, включая распаковку, pip temporary и outputs; после оставшихся записей этого этапа и других задач всегда **50 GiB = 53 687 091 200 B резерва**. Секреты, платные сервисы, cloud inference, системный PATH/CUDA/драйверы/защита/сеть не требуются. Разрешение на статический аудит не считается разрешением на install/import/pilot.
 
-## Включённые функции и ограничения
+| Активная функция | Точный набор | Размер моделей/config | Условия |
+|---|---|---:|---|
+| Vocals/Instrumental | audio-separator0.47.0 + BS-RoFormer ep317 | 639 333 486 B,2 файла | Неустановленный runtime; **original checkpoint licence hold**; gate8000 MiB |
+|4 stems | Предыдущий этап + htdemucs_ft,4 Meta `.th` и YAML | 336 565 233 B,5 файлов | Зависит от RoFormer; Demucs MIT; gate8000 MiB |
+| Увеличение изображения4x | Spandrel0.4.2 + einops0.8.2 + официальный RealESRGAN_x4plus | 67 040 989 B,1 файл |2 ART pure wheels =386 449 B; gate4000 MiB; реальный Windows pilot ещё не выполнен |
 
-| Функция | Конкретный вариант | Состояние |
-|---|---|---|
-| Вокал / инструментал; 4 stems | audio-separator 0.47.0, BS-RoFormer ep317, htdemucs_ft | Windows wheels закреплены; оригинальные условия RoFormer unresolved; реального запуска нет |
-| Creator: ноты из записи | SheetSage2-Q8_0.gguf; существующий yue-server.exe /transcribe | Модель закреплена, CC BY-NC 4.0; native peak не измерен |
-| Аудио upscale | UniverSR 0.1.5, universr-audio | Нет опубликованного wheel версии; нужен полный source audit/local packaging; VRAM gate сейчас блокирует |
-| Изображение upscale | Spandrel 0.4.2 + einops 0.8.2; официальный RealESRGAN_x4plus | Два ART wheels, 386 449 байт; Windows inference ещё не проверен |
-| Creator адаптеры | Поддержка загрузки сохранена; файлы не выбирались | Каталог LoRA не означает обязанность скачивать чужие голоса; **0 байт квоты** |
+Все8 активных model/config файлов: **1 042 939 708 B**. Минимальная closure: **31 unique wheel records**,3 уже cached,28 ещё не получены, их compressed transfer **58 922 892 B**. Суммарный ожидаемый успешный payload нового этапа **1 101 862 600 B**;1.5GB cap включает запас, но не обещает бесконечные retries. Официальный cached torchvision0.26.0+cu128 всё ещё нужен CORE, потому что его требует onnx2torch-py313; ART уже содержит его. Два вновь статически прочитанных маленьких wheels повторно не скачиваются после проверки SHA. Сеть и новые выделения учитываются отдельно.
 
-Trainer BF16 требует 20 000 МиБ; Krea Q4/Q8 — 12 500/18 500; стандартные Qwen — 15 500–22 500. Они исключены. MERT custom Python/обучение, paid Civitai, случайные LoRA, LCM/Lightning shortcuts и streamed Qwen сюда не входят. SDXL worker не реализует LCM sampler; популярность адаптера не доказывает совместимость. Existing Writer/Listener/Whisper повторно не скачиваются. SDXL снят пользователем из scope; его файлы только сохранены.
+Три блока отложены из этого разрешения: SheetSage transcription (957 571 488 B, CC BY-NC4.0), UniverSR audio upscale (229 072 928 B model/config, MIT code/CC BY4.0 weights), Creator external adapters (**0 B**). Их pins и загрузчики сохранены. Каталог адаптеров не требует загружать чужие голоса или style weights; структурная поддержка проверяется без этих весов. `timm` и `torchdiffeq` относятся только к отложенному UniverSR и не входят в минимальную установку.
 
-## Закреплённые модели
+## Лицензии и происхождение
 
-Все **11 файлов**, exact paths/URL/размер/полный SHA-256 указаны в JSON; всего **2 229 584 124 байта**.
+**RoFormer — реальный остаточный blocker.** Original publisher [TRvlvr release](https://api.github.com/repos/TRvlvr/model_repo/releases/tags/all_public_uvr_models) имеет пустой body и не даёт явных условий Viperx checkpoint. MIT у [audio-separator](https://pypi.org/pypi/audio-separator/0.47.0/json) и mirror Eddycrack864 не доказывает лицензию оригинальных весов. Его загрузка/использование удерживаются до выяснения условий либо отдельного явного решения человека о ограниченной личной проверке с принятием этой неопределённости. Такое решение не создаёт прав и не доказывает коммерческую готовность. Никакая случайная replacement-модель не выбиралась. При удержании stems этап image-upscale можно завершить самостоятельно.
 
-| Файлы | Байты | Pin / условия |
-|---|---:|---|
-| SheetSage2-Q8_0.gguf | 957 571 488 | Serveurperso/YuE2-GGUF @ 64b030e3deb6e8150d2b7c0db641ef5a17eca8a3; конверсия m-a-p/SheetSage2 + MERT; CC BY-NC 4.0 |
-| UniverSR config.yaml + pytorch_model.bin | 229 072 928 | woongzip1/universr-audio @ 1c3294844285af851b6ffa56cbde4e43cd41fc2b; CC BY 4.0 weights, MIT code |
-| BS-RoFormer .ckpt + .yaml | 639 333 486 | .ckpt original TRvlvr release; SHA/YAML из Eddycrack864 mirror @ 4a3768dfdd3c74104f63b9edda5b1efc8bd29f2c |
-| htdemucs_ft: четыре .th + YAML | 336 565 233 | Оригинальные .th dl.fbaipublicfiles.com/demucs; YAML TRvlvr; Meta Demucs MIT repository, retain notices |
-| RealESRGAN_x4plus.pth | 67 040 989 | Оригинальный xinntao/Real-ESRGAN release v0.1.0; upstream repository BSD 3-Clause |
+Demucs original weights: [Meta publisher](https://github.com/facebookresearch/demucs), `dl.fbaipublicfiles.com/demucs/hybrid_transformer`; исходное MIT notice сохраняется. Full SHA взяты из pinned unchanged mirror-manifest, оригинальные имена содержат8символьный SHA prefix; original bodies пока не читались. RealESRGAN берётся только из [официального release v0.1.0](https://api.github.com/repos/xinntao/Real-ESRGAN/releases/tags/v0.1.0), BSD3 notice из [pinned upstream LICENSE](https://github.com/xinntao/Real-ESRGAN/blob/a4abfb2979a7bbff3f69f58f58ae324608821e27/LICENSE). Ожидаемый SHA `4fa0d38905f75ac06eb49a7951b426670021be3018265fd191d2125df9d682f1` подтверждён [LFS metadata неизменённого mirror](https://huggingface.co/api/models/lllyasviel/Annotators/revision/ee6ef4211a08a40873a0710815b682ecc98bccab?blobs=true); GitHub asset digest=null. Это provenance ожидаемого хэша, а не уже проверенные bytes. Future receiver сверяет полные SHA до rename/import.
 
-**RoFormer licence hold:** original release body пуст; явные условия checkpoint не найдены. MIT у separator/mirror не доказывает условия оригинальных весов. Загрузка/исполнение этой части удерживаются до выяснения условий либо отдельно оговорённого личного оценочного использования с явным признанием неопределённости. Коммерческая готовность не заявляется.
+`diffq-fixed0.2.4` декларирует **CC BY-NC4.0**, поэтому stems dependency set содержит NC компонент. `samplerate0.1.0` wrapper декларирует MIT, bundled **libsamplerate0.1.9 — BSD2**: подтверждено embedded version и [original COPYING](https://github.com/libsndfile/libsamplerate/blob/f6730d03c3e7660bb6ecad8816f1b09c5825142a/COPYING). Это не LGPL/GPL библиотека в данном pin. Wheel не включает полный wrapper copyright notice; exact notice надо получить до распространения, BSD COPYING сохранён отдельно. Это отдельный redistribution hold, а не установленная ошибка локального импорта.
 
-**Hash provenance:** GitHub старых assets возвращает digest=null. Ожидаемый RealESRGAN SHA `4fa0d38905f75ac06eb49a7951b426670021be3018265fd191d2125df9d682f1` подтверждён LFS metadata unchanged mirror lllyasviel/Annotators @ ee6ef4211a08a40873a0710815b682ecc98bccab; размер original asset совпал. Demucs full hashes берутся из existing pinned mirror-manifest; original filenames дополнительно содержат 8 символов SHA. Это ожидаемые хеши с указанным происхождением, **не уже проверенные original bytes**. Future receiver скачивает оригиналы и сверяет полный SHA до rename/import. BSD notice RealESRGAN прочитан в исходнике @ a4abfb2979a7bbff3f69f58f58ae324608821e27; original release не содержит per-asset licence field. Не заменять исходные notices лицензией общего mirror.
+`soxr0.5.0.post1` wrapper и embedded libsoxr: **LGPL2.1-or-later**; PFFFT/FFTPACK permissive notice сохранён. В wheel одна `.pyd`, отдельного libsoxr DLL нет, поэтому нельзя обещать простую динамическую замену. Для распространения нужны notices, applicable corresponding source и replacement/relinking/source/object mechanism LGPL sections4/6; такой комплект сейчас не собран. Внутреннее локальное выполнение и публичное распространение рассматриваются отдельно. Точные notices доступны в [static native receipt](cache/optional-review/88a1b1fc-a4b5-4372-bb16-e7d08d8e687b/native-dll-audit.json).
 
-Источники: [SheetSage metadata](https://huggingface.co/api/models/Serveurperso/YuE2-GGUF/revision/64b030e3deb6e8150d2b7c0db641ef5a17eca8a3?blobs=true), [UniverSR metadata](https://huggingface.co/api/models/woongzip1/universr-audio/revision/1c3294844285af851b6ffa56cbde4e43cd41fc2b?blobs=true), [original RoFormer release](https://api.github.com/repos/TRvlvr/model_repo/releases/tags/all_public_uvr_models), [Meta publisher](https://github.com/facebookresearch/demucs), [original RealESRGAN release](https://api.github.com/repos/xinntao/Real-ESRGAN/releases/tags/v0.1.0), [RealESRGAN expected SHA metadata](https://huggingface.co/api/models/lllyasviel/Annotators/revision/ee6ef4211a08a40873a0710815b682ecc98bccab?blobs=true).
+## Что закрыто статически, что ещё не проверено
 
-## Windows binary-only dependency plan
+Native audit получил **4 227 343 B** wheel/licence/API тел под8MiB cap; исходников/API audit получил **302 299 B** под16MiB cap. Ранний общий metadata traffic не был полностью измерен; общего точного network total не заявляем. **Новых весов, установки, DLL loading, vendor imports, compilation, GPU queries и optional inference не было.**
 
-Сохраняются .venv/.venv-art, Python 3.10, Torch 2.11.0+cu128, NumPy 2.2.6 и **все existing distribution versions**. Не создаётся третий полный Torch environment. Original validation locks не переписываются; после разрешения создаются отдельные extension locks/snapshots/receipt.
+Два exact wheels сверены по размерам/SHA и разобраны как ZIP/PE. AMD64 libsamplerate imports KERNEL32/msvcrt, CFFI declarations соответствуют exports; wheel METADATA требует cffi>=1 и NumPy — baseline cffi2.1.1/NumPy2.2.6 удовлетворяет этим constraints. Будущий import обязан подтвердить bundled AMD64 DLL path: upstream `find_library` может выбрать global library. SoXR exact cp310 AMD64 `.pyd` imports python310/MSVC/UCRT; named exports и фактическая Windows API-set mapping соответствуют имеющимся файлам Windows11/CPython3.10.11. **Это static ABI, не runtime NumPy/CFFI ABI, resampling или загрузка DLL.** Receipt SHA `73d5ef5c6d4b6f0a9f04c3e84f101223f960a4d9d1d0be96c4625b2dbde03f9d`.
 
-JSON закрепляет **33 unique wheel records**: filename, size, SHA256, environment, primary release JSON URL. Уже проверенный официальный cached torchvision 0.26.0+cu128 нужен только CORE; ART его содержит. **32 новых сетевых wheels = 65 717 170 байт**; unique compressed с cached torchvision = **74 717 004**. Один einops-файл используется обеими средами. CORE huggingface-hub остаётся 0.36.2, ART — 1.33.0.
+Остальные wheel bodies ещё не audited. Metadata Windowscp310 closure pinned; current Torch2.11.0+cu128/NumPy2.2.6 и **все existing versions сохраняются**. Numba0.61.2 требует NumPy<2.3 и llvmlite0.44; выбранные версии подходят декларациям, реальные native imports не выполнены. Julius0.2.8 имеет wheel, source-only0.2.7 не используется. Cython — готовый Windows wheel для dependency diffq, compilation запрещена.
 
-Полный граф указан в JSON. numba 0.61.2 требует NumPy <2.3 и llvmlite <0.45: текущий 2.2.6/выбранный 0.44.0 подходят. julius 0.2.8 имеет wheel; source-only 0.2.7 не используется. Cython — готовый cp310 Windows wheel для metadata dependency diffq-fixed; **компиляция расширений не разрешена**.
+ONNX prerelease **1.24.0.dev20260928** выбран потому, что audio-separator0.47.0 и [onnx2torch-py3131.6.0](https://pypi.org/pypi/onnx2torch-py313/1.6.0/json) требуют distribution **onnx-weekly**. Stable `onnx` не удовлетворяет этому имени. Latest20261012 требует Python>=3.11; fixed selected cp310 wheel требует>=3.10. No metadata patch/source workaround. CPU onnxruntime1.23.2 сохраняется; [gpu]/[dml], новые CUDA/cuDNN/torchcodec, train/dev/test/docs extras не устанавливаются. Metadata pins не равны выполненному pip resolver/install/check.
 
-**Почему prerelease ONNX:** [audio-separator 0.47.0](https://pypi.org/pypi/audio-separator/0.47.0/json) и [onnx2torch-py313 1.6.0](https://pypi.org/pypi/onnx2torch-py313/1.6.0/json) явно требуют distribution name onnx-weekly. Stable onnx 1.20.1 не удовлетворяет этому имени, хотя импорт тоже onnx. Проверенные 0.45/0.46 также требуют weekly. Выбран **1.24.0.dev20260928 cp310 Windows**, Python >=3.10; latest 20261012 требует >=3.11. METADATA не патчится, конфликтующие onnx distributions одновременно не устанавливаются. Это осознанная prerelease-зависимость, требующая теста.
+## UniverSR: аудит закончен, выполнение отложено
 
-[gpu]/[dml] extras не нужны выбранным Torch RoFormer/Demucs: CPU onnxruntime 1.23.2 сохраняется; Torch CUDA уже есть. ONNX CUDA, DirectML, train/dev/test/docs, pretty-midi, torchcodec, wandb, global CUDA/cuDNN не добавляются. UniverSR worker использует soundfile/tensor, без codec load/save path.
+[UniverSR pin d8636623fe0c0704296239c1d3d3c5b911ecb2e0](https://github.com/woongzip1/UniverSR/tree/d8636623fe0c0704296239c1d3d3c5b911ecb2e0), version0.1.5, MIT. Published PyPI wheel нет (version endpoint404).14 package `.py` получены как текст с Git blob OID verification; весь selected inference import/call path прочитан. Для future inference-only wheel нужны9 `.py`, **42 814 B**, плюс original LICENSE/README и metadata. [Source audit/packaging manifest](cache/optional-review/sources-19ca8abed9/selected-source-audit.json), SHA `33d4a255ff1a1ec8d35b02de5c28b0dda9ac2973058501c285dfae29d303d955`. Это selected path audit; training/generic factory APIs не заявляются проверенными.
 
-**Лицензии deps:** diffq-fixed 0.2.4 declares **CC BY-NC 4.0** — stems runtime содержит NC dependency. samplerate 0.1.0 declares MIT wrapper, но universal wheel с native library требует чтения bundled DLL terms и проверки architecture. У soxr 0.5.0.post1 licence fields null; wrapper/bundled terms не угадываются. LLVM/BSD notices llvmlite сохраняются. До imports ZIP audit должен подтвердить exact METADATA/RECORD/LICENSE, contained paths, .pth/startup hooks и Windows DLL architecture. Если условия/ABI/closure не подтверждены, остановить компонент, без source-build обхода.
+`from_pretrained(existing local directory)` применяет `yaml.safe_load`, `torch.load(weights_only=True,map_location=cpu)` и fixed classes. Remote hf_hub_download fallback существует, поэтому обязательны проверенные local config/bin и process offline guard. Training `from_local(weights_only=False)` и dynamic `flow.path.get_path`, trainer APIs исключены. `torchinfo` нужен только `unet.main()` dummy test, import/inference его не вызывает. Torch paper environment2.7.1, metadata>=2 допускает2.11, но реальная совместимость ещё не проверена.
 
-**Метаданные не равны выполненному pip resolver/install/check.** Перед offline install сравнить полный граф с exact baseline versions; никакие implicit installs/downloads не допускаются.
+Готов рецепт собственного deterministic stdlib ZIP/RECORD packager: exact source bytes, original MIT notice, fixed timestamps/order/modes, WHEEL/METADATA/RECORD, final wheel SHA до install. **Wheel не построен и не установлен**; upstream setup.py/PEP517 backend/native CUDA build не запускается. Audio profile не входит в текущее разрешение.
 
-## UniverSR source-only exception
+Источник показывает: midpoint4 steps/CFG1.5 default, minimum32768 samples, ODE solver сохраняет **все steps+1 states**, затем клонирует последний; CFG делает два forward paths. Existing worker —20s chunks/1s overlap, stereo sequential; upstream комментарий «около10GB на3090» не является измерением3060. **Gate11000 MiB сохранён**, supplied admitted free10590−512=10078 → blocked. Теоретический idle12288−512=11776 не доказывает fit и не требует автоматически24GB: нужны отдельное разрешение, exclusive lease, fresh VRAM/RAM/commit admission и реальные short/20s peaks. Gate не снижается.
 
-[Source pin d8636623fe0c0704296239c1d3d3c5b911ecb2e0](https://github.com/woongzip1/UniverSR/tree/d8636623fe0c0704296239c1d3d3c5b911ecb2e0), version 0.1.5, MIT; PyPI version endpoint вернул 404. Tree metadata: 1 007 960 байт всех blobs. Это **не опубликованный wheel**.
+## Ресурсы и точный будущий порядок
 
-После разрешения получить только pinned package .py/config/license/metadata в contained vendor/UniverSR, проверить Git blob OIDs и весь selected import path. Собственным проверенным stdlib ZIP/RECORD packager создать deterministic pure wheel **без исполнения upstream setup.py/PEP517 backend**; записать local wheel size/SHA/Requires-Dist до install/import. No unpinned git install, no native/CUDA build. Если аудит/упаковка не завершаются, компонент остаётся blocked. Сейчас прочитаны inference.py/unet.py/pyproject, но **полный source audit ещё не выполнен**.
+| Блок | Решение для RTX3060 12GB |
+|---|---|
+| Stems8000 / image4000 MiB | supplied10078 snapshot пропускает численный gate; actual peak/pilot неизвестны |
+| UniverSR11000 MiB | supplied snapshot blocked, отдельная idle-card проверка отложена |
+| SheetSage | fixed300s padded native window; краткое аудио не доказывает малый peak; отложено |
+| Trainer BF16 |20000 MiB: требуется24GB класс, исключён из этого этапа |
+| Standard Krea/Qwen | Krea Q4/Q8 12500/18500, Qwen15500–22500 MiB: текущая12GB карта ниже gate; streamed paths не подтверждены |
 
-Selected `universr/inference.py::from_pretrained(local_directory)` применяет `torch.load(weights_only=True)`. Training `from_local` применяет weights_only=False и исключён. Upstream paper uv constraints Torch2.7.1; broad runtime>=2 допускает2.11, фактическая совместимость ещё не проверена.
+Fresh disk snapshot `2026-10-12T22:29:41.154855+00:00`: **59 797 303 296 B** свободно E:. После3.5GB максимального нового выделения остаётся **56 297 303 296 B**, ещё **2 610 212 096 B** над50GiB до учёта других pending writes. Их объём неизвестен, поэтому `diskAdmitted=false`. Cap включает source/metadata20MB, unpack+pip temporary1.5GiB и pilots/outputs256MiB; ZIP uncompressed totals проверяются до pip. Если оценка превышаетcap или нет50GiB после всех задач — stop, partial cache сохраняется. Старые weights/outputs/проекты не удаляются; `.part`→final rename на том жеE: без дублирования.
 
-Spandrel0.4.2 source @724cca389f28c38e1050689d4862a452fd644484 для .pth использует RestrictedUnpickle. Это уменьшает риск, но не заменяет аудит. Для будущего RoFormer/Demucs wheel audit проверить actual checkpoint loader; нельзя молча включать unrestricted pickle/trust_remote_code.
+После нового разрешения исполняются только следующие действия, последовательно:
 
-## VRAM и 50 GiB disk reserve
+1. Проверить текущий HEAD/relevant source и baseline lock hashes, licences и свежий disk forecast с **известными** other pending writes. Historical audited base `ff5c470...` не является требованием future HEAD equality.
+2. Составить отдельные direct-URL/hash-required download и extension locks по active31 records из JSON и exact первичным metadata; оригинальные validation locks не менять. Получить28 отсутствующих wheels через quota-aware receiver. Проверить все ZIP/RECORD/METADATA/.pth/startup/native notices, actual checkpoint loaders и closure. Unrestricted pickle/global side effects — stop для соответствующего профиля, а не source workaround.
+3. Offline binary-only `--no-deps --require-hashes` extension install в existingCORE/ART; `pip check`, sequential offline imports/version snapshot; не менять baselineversions. Дополнительная третья venv не создаётся. При runtime ABI/conflict — stop.
+4. Получить только8 active model/config files после licence gates, проверить полные SHA и sizes, notices/atomic rename. RoFormerhold сохраняется, если не снят отдельным решением. Никаких automaticdownloads.
+5. Остановить только собственные модели, exclusive GPU lease и fresh RAM/commit/VRAM/disk guards. Один synthetic256×256→1024×1024 imagepilot; затем synthetic10s stereo vocals/4stem pilots при licence/admission. Проверить фактические outputs/channels/rate/duration/finite values/timing/peak, не объявлять musicalquality доказанной. Никаких concurrentmodels или deferredpilots.
 
-Root snapshot: **10 590 − 512 = 10 078 МиБ** WDDM aggregate admitted free. Здесь новых GPU запросов не было. Stems gate8000 и image gate4000 численно проходят snapshot; реальных peaks нет. **Audio UniverSR gate11000 блокирует.** Теоретическая idle карта:12288−512=11776; existing empty_fits требует no foreign GPU processes/no limit/free>=11264. Такие условия и результат на12GB здесь не проверены; gate не снижается из-за теории.
-
-SheetSage дополняет любой звук до **300 секунд**: короткий файл не доказывает малый native peak. Root должен освободить собственные models, взять эксклюзивный lease, проверить RAM/commit и native admission. Найден только windows/build/full-engine/yue-server.exe; standalone yue-transcribe.exe не предполагается.
-
-JSON snapshot free E:**59 925 880 832 байта**; минус worst new disk5GB =**54 925 880 832**, над50GiB остаётся**1 238 789 632**. Это без неизвестных future writes других задач, поэтому `diskAdmitted=false`. Перед каждой записью всё измерить заново.
-
-Known successful payload **2 295 301 294 B** (models+new wheels). Source/metadata allowance20MB; unpack+pip temp allowance1.5GiB; pilots/outputs256MiB; общий write cap5GB. Перед pip прочитать ZIP Entries uncompressed totals и подтвердить пик. На E применять atomic .part->final rename, не создавать вторую копию models; resume prefix не дублировать. При unknown pending/большем пике/исчерпании квоты — stop, сохранить partial. Старые caches/outputs/models/другие проекты не удалять.
-
-## Конкретные последовательные этапы после нового разрешения
-
-1. Прочитать текущий HEAD и заново проверить relevant source/lock hashes, historical ready, disk и все other pending writes. ff5c470 — база аудита; будущий combined commit не обязан равняться ей. Проверка не требует circular commit SHA. Old ready hash differences объясняются CRLF->LF normalization: **windows/cache/checkpoint/text-normalization.json**, backups before-text-normalization. Версии/модельные и wheel hashes не менялись.
-2. Для каждого JSON wheel получить exact metadataUrl, выбрать exact filename+size+SHA и URL files.pythonhosted.org; создать отдельный hashes-required direct-URL download lock по environments. Cached torchvision брать из windows/cache/validation-runtime/wheels с SHA. До каждого HTTP тела проверять received ledger/cap и disk forecast.
-3. Download-only cache, static wheel/license/ABI/source audit; завершить gates. Review/package local UniverSR wheel с новым SHA. Получить pinned models, соблюдая RoFormer licence hold. Никаких auto model downloads.
-4. Offline install только extension lists, затем pip check и offline imports/version checks по очереди. Сравнить все baseline versions, сохранить новые extension snapshots/ready receipt; historical ready/locks не менять.
-5. Root штатно останавливает свои модели, берёт GPU lease и fresh VRAM/RAM/commit guards. Только допущенные profiles получают один synthetic pilot из JSON acceptance. Stop на fail/OOM/no admission; файлы сами по себе не доказывают работу.
-
-Команды ниже **не исполнялись**; extension locks пока не созданы, их нужно получить из JSON и audit receipt:
+Команды install **ещё не выполнялись**; указанные extension locks будут созданы на шаге2 и сейчас отсутствуют. Их содержание ограничено active pins; самостоятельный запуск до cache/audit/admission будет ошибкой:
 
 ```powershell
 Set-Location 'E:\Projects\Ruach_Studio\full-windows-port'
-$p = Get-Content .\windows\optional-runtime-package.json -Raw | ConvertFrom-Json
 git rev-parse HEAD
-# Перед каждой записью учесть ВСЕ другие задачи; неизвестное не равно нулю.
-$otherPending = $null
-if ($null -eq $otherPending) { throw 'Нужен объём оставшихся записей других задач' }
-$remainingOptional = [long]$p.bounds.maxNewDiskAllocationBytes
-if ((Get-Volume -DriveLetter E).SizeRemaining - $remainingOptional - $otherPending `
-    -lt [long]$p.bounds.diskReserveBytes) { throw 'Недостаточно резерва 50 GiB' }
-
-# AFTER generated extension locks and exact cache/source/licence audit:
+# AFTER explicit new approval, exact cached hashes/body audit and disk admission:
 .\.venv\Scripts\python.exe -m pip install --no-index `
   --find-links .\windows\cache\optional\wheels --no-deps `
   --only-binary=:all: --require-hashes `
@@ -104,8 +82,6 @@ if ((Get-Volume -DriveLetter E).SizeRemaining - $remainingOptional - $otherPendi
 .\.venv-art\Scripts\python.exe -m pip check
 ```
 
-Download locks используют exact released URL+SHA: `pip download --no-deps --only-binary=:all: --require-hashes --no-cache-dir -r <download.lock>` допускается только через quota-aware receiver/ledger. Обычный pip/curl без учёта всех тел не доказывает3GB limit. Source wheel audit является отдельным prerequisite, в extension lock включается только после known local hash.
+Download locks с exact URL/SHA используются только через receiver с ledger: обычный неограниченный pip/curl не доказывает1.5GB cap. Ready receipt появится только после actual import/pilot результатов, failed/held profiles остаются явными blocker. Static research завершён; новые weights, install и ML требуют следующего ограниченного разрешения.
 
-Окончание подтверждается model hashes/notices, binary closure/source wheel receipt, сохранёнными baseline versions, pip check/imports и **реальными результатами каждого допущенного pilot**. Adapters/аппаратно blocked функции остаются unresolved/blocked. Сейчас этих результатов для пакета нет.
-
-Автоматическая проверка отклонила raw .pth read из-за риска получить полный вес; команда не выполнялась. Safe /api/models JSON дал size/SHA. Установочные ограничения не обходились.
+Ранее автоматическая проверка отклонила raw `.pth` read из-за возможной загрузки весов; он не исполнялся. Safe publisher/API JSON дал нужные metadata, поэтому это **не оставшийся blocker** и исключение не запрашивается.
