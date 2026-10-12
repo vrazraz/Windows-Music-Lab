@@ -1,0 +1,46 @@
+{
+  "cuda": [
+    {
+      "component": "cuda_nvcc",
+      "filename": "cuda_nvcc-12.8.93.zip",
+      "url": "https://developer.download.nvidia.com/compute/cuda/redist/cuda_nvcc/windows-x86_64/cuda_nvcc-windows-x86_64-12.8.93-archive.zip",
+      "size": 120912792,
+      "sha256": "9fdc70b4271ed9aad4d64cd7076a7d96ec36512d074b9995fe638de669197391"
+    },
+    {
+      "component": "cuda_cudart",
+      "filename": "cuda_cudart-12.8.90.zip",
+      "url": "https://developer.download.nvidia.com/compute/cuda/redist/cuda_cudart/windows-x86_64/cuda_cudart-windows-x86_64-12.8.90-archive.zip",
+      "size": 3037735,
+      "sha256": "4a39058fd8519444a81cfc7ae055d136f48d1a31ffa41ae255b35b2edd61e13b"
+    },
+    {
+      "component": "cuda_cccl",
+      "filename": "cuda_cccl-12.8.90.zip",
+      "url": "https://developer.download.nvidia.com/compute/cuda/redist/cuda_cccl/windows-x86_64/cuda_cccl-windows-x86_64-12.8.90-archive.zip",
+      "size": 2911311,
+      "sha256": "bd8548fa1ae82f92910bebc3079e14bd58c5a92aa64596d46bd610a478cb39d7"
+    },
+    {
+      "component": "libcublas",
+      "filename": "libcublas-12.8.4.1.zip",
+      "url": "https://developer.download.nvidia.com/compute/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-12.8.4.1-archive.zip",
+      "size": 563660944,
+      "sha256": "57a470112cec7e112c95253dde8b3c7184d795dbd92b0bde77a4cb7f8c94c8aa"
+    }
+  ],
+  "models": [
+    {
+      "filename": "YuE2-3B-Q8_0.gguf",
+      "url": "https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/64b030e3deb6e8150d2b7c0db641ef5a17eca8a3/YuE2-3B-Q8_0.gguf",
+      "size": 3810232064,
+      "sha256": "41121ce97786d7795a325bcf123ca196956c03bb252c9e75384cfc1f2fc19e6b"
+    },
+    {
+      "filename": "YuE2-Vae-F32.gguf",
+      "url": "https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/64b030e3deb6e8150d2b7c0db641ef5a17eca8a3/YuE2-Vae-F32.gguf",
+      "size": 530497344,
+      "sha256": "93e49dfb1970e89ad64cacb17cf13b5d05f6bb30ef7ed3adae3050bcb728638a"
+    }
+  ]
+}

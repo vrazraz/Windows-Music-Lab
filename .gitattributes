@@ -1,0 +1,2 @@
+# Keep the native Windows launcher as CRLF; Git stores normalized text.
+/Start.cmd text eol=crlf

@@ -1,0 +1,295 @@
+﻿<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Windows Music Lab</title>
+<style>
+:root{color-scheme:light;--ink:#24352d;--muted:#69746c;--paper:#f3f1e9;--card:#fffef9;--line:#dddcd1;--accent:#a04d34}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.5 "Segoe UI",sans-serif}
+header{border-bottom:1px solid var(--line);padding:24px max(24px,calc((100vw - 1160px)/2));display:flex;align-items:center;justify-content:space-between;gap:18px}
+.brand{font-weight:750;font-size:23px;letter-spacing:2px}.brand small{display:block;font-size:11px;letter-spacing:3px;color:var(--muted);font-weight:500}
+.connection{font-size:13px;color:var(--muted);display:flex;gap:9px;align-items:center}.dot{width:8px;height:8px;border-radius:50%;background:#aaa}.online .dot{background:#448465}
+main{max-width:1160px;margin:38px auto;padding:0 24px;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr);gap:28px}
+.intro{grid-column:1/-1;display:flex;justify-content:space-between;align-items:end;gap:20px}.eyebrow{text-transform:uppercase;font-size:11px;letter-spacing:2px;color:var(--accent);font-weight:650}h1{font-size:34px;line-height:1.2;margin:8px 0 0}h2{font-size:19px;margin:0}.intro p{max-width:330px;margin:0;color:var(--muted);font-size:14px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:25px}.panel-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:22px}
+label{display:block;font-size:13px;font-weight:650;margin:17px 0 7px}input,textarea,select{font:inherit;font-size:14px;width:100%;background:#fafaf4;border:1px solid var(--line);border-radius:7px;padding:11px;color:var(--ink)}textarea{resize:vertical;min-height:83px}#lyrics{min-height:190px}
+input:focus,textarea:focus,select:focus{outline:2px solid #b99870;outline-offset:2px}.row{display:grid;grid-template-columns:1fr 1fr;gap:16px}.check{display:flex;align-items:center;gap:8px;font-weight:400}.check input{width:auto;accent-color:var(--accent)}
+.hint{font-size:12px;color:var(--muted);margin:7px 0 0}button{font:inherit;font-size:13px;border:1px solid var(--line);border-radius:7px;padding:10px 14px;background:transparent;color:var(--ink);cursor:pointer}button:disabled{cursor:default;opacity:.45}.primary{background:var(--accent);border-color:var(--accent);color:white;font-weight:650;padding:13px 20px}
+.actions{display:flex;gap:10px;align-items:center;margin-top:24px}.actions .primary{flex:1}.job{margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}#status{font-size:14px;margin:0}#error{color:#a02c25;white-space:pre-wrap;font-size:13px}progress{width:100%;height:7px;margin-top:14px;accent-color:var(--accent)}#score{font:12px/1.5 Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto}
+.empty{padding:35px 16px;border:1px dashed var(--line);border-radius:9px;color:var(--muted);font-size:14px;text-align:center}.take{padding:18px 0;border-top:1px solid var(--line)}.take:first-child{border:0;padding-top:0}.take-title{font-size:15px;font-weight:650;margin:0}.take-meta{font-size:12px;color:var(--muted);margin:4px 0 11px}.take audio{width:100%;height:38px}.take-links{display:flex;gap:15px;margin-top:8px}.take a{font-size:12px;color:var(--accent)}
+footer{max-width:1160px;margin:15px auto 35px;padding:0 24px;color:var(--muted);font-size:12px}
+@media(max-width:780px){main{grid-template-columns:1fr;margin-top:25px;gap:20px}.intro{display:block}.intro p{margin-top:14px}h1{font-size:29px}header{padding:18px 24px}.connection{font-size:11px}.panel{padding:20px}}
+
+.style-tools{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin:17px 0 7px}.style-tools label{margin:0}.random-style{padding:7px 12px;color:var(--accent);font-weight:650}
+.style-picker{margin-top:9px;padding:12px;background:#fafaf4;border:1px solid var(--line);border-radius:8px}.style-picker summary{font-size:12px;color:var(--muted);cursor:pointer}.tag-categories{display:flex;flex-wrap:wrap;gap:5px;margin:12px 0 10px}.tag-category{font-size:11px;padding:5px 8px;border-color:transparent}.tag-category[aria-selected="true"]{color:var(--accent);background:#f1e3d8;border-color:#d7bca6}.tag-grid{display:flex;flex-wrap:wrap;gap:6px}.tag-chip{font-size:12px;padding:5px 9px;background:var(--card);border-radius:20px}.tag-chip.selected{background:#e7ede5;border-color:#aebfaa;color:#31523c}.tag-chip:hover{border-color:var(--accent)}.tag-chip:focus-visible,.tag-category:focus-visible,.random-style:focus-visible{outline:2px solid var(--accent);outline-offset:2px}.style-feedback{min-height:18px;font-size:11px;color:var(--muted);margin:9px 0 0}
+@media(max-width:420px){.panel-head{flex-wrap:wrap}.brand{font-size:19px}.connection{font-size:10px}.style-picker{padding:10px}.tag-category{padding:5px 6px}}
+
+</style>
+</head>
+<body>
+<header><div class="brand">MUSIC LAB <small>NATIVE WINDOWS</small></div><div class="connection" id="connection"><span class="dot"></span><span id="connectionText">Подключение…</span></div></header>
+<main>
+<div class="intro"><div><div class="eyebrow">Музыка из ваших слов</div><h1>Начните с идеи.</h1></div><p>Опишите звучание, добавьте текст — и сохраните первый дубль в своей библиотеке.</p></div>
+<section class="panel">
+<div class="panel-head"><h2>Новая композиция</h2><button id="example" type="button">Пример для первого запуска</button></div>
+<form id="form">
+<label for="title">Название</label><input id="title" maxlength="120" placeholder="Моя первая композиция">
+<div class="style-tools"><label for="style">Звучание и настроение</label><button id="randomStyle" class="random-style" type="button" title="Заменить описание новым случайным сочетанием">Случайно</button></div><textarea id="style" required maxlength="2000" placeholder="Calm acoustic pop, warm piano, soft female vocals"></textarea>
+<details id="stylePicker" class="style-picker" open><summary>Подобрать музыкальные теги</summary><div id="styleCategories" class="tag-categories" role="tablist" aria-label="Категории музыкальных тегов"></div><div id="styleTagPanel" class="tag-grid" role="tabpanel"></div><p id="styleFeedback" class="style-feedback" aria-live="polite">Нажмите тег, чтобы добавить его. Описание можно редактировать вручную.</p></details>
+<label class="check"><input id="instrumental" type="checkbox">Инструментальная композиция</label>
+<div id="lyricsFields"><label for="lyrics">Текст песни</label><textarea id="lyrics" maxlength="10000" placeholder="[verse]&#10;Первая строка…&#10;&#10;[chorus]&#10;Припев…"></textarea><p class="hint">Обозначьте части песни тегами [verse], [chorus], [bridge].</p></div>
+<div class="row"><div><label for="duration">Длительность, секунд</label><input id="duration" type="number" value="20" min="5" max="30" step="1" required></div><div><label for="format">Формат</label><select id="format"><option value="mp3">MP3</option><option value="wav16">WAV</option></select></div></div>
+<details style="margin-top:18px"><summary style="font-size:13px;cursor:pointer">Дополнительные настройки</summary>
+<div class="row"><div><label for="cot">План композиции</label><select id="cot"><option value="off">Прямая генерация</option><option value="full">Сначала партитура</option></select></div><div><label for="steps">Шаги обработки звука</label><input id="steps" type="number" min="1" max="64" value="32" required></div></div>
+<div class="row"><div><label for="lmSeed">Seed музыки</label><input id="lmSeed" type="number" min="-1" max="2147483647" value="-1"></div><div><label for="seed">Seed звучания</label><input id="seed" type="number" min="-1" max="2147483647" value="-1"></div></div><p class="hint">−1: новый случайный вариант. У короткого первого дубля проще проверить результат.</p>
+</details>
+<div class="actions"><button class="primary" id="generate" type="submit" disabled>Создать композицию</button><button id="cancel" type="button" disabled>Остановить</button></div>
+</form>
+<div class="job" aria-live="polite"><p id="status">Ожидаем подключение к студии.</p><progress id="progress" hidden></progress><p id="error" role="alert"></p><details id="scoreDetails" hidden><summary>Созданная партитура</summary><pre id="score"></pre></details></div>
+</section>
+<section class="panel"><div class="panel-head"><h2>Ваши дубли <span id="count" class="hint"></span></h2><button id="refresh" type="button">Обновить</button></div><div id="library"><div class="empty">Здесь появится ваша первая композиция.</div></div></section>
+</main>
+<footer>Композиции сохраняются в папке outputs. Оставьте окно запуска открытым, пока работаете. Для остановки студии нажмите Ctrl+C в этом окне. · <a href="https://github.com/vrazraz/Windows-Music-Lab" target="_blank" rel="noopener">Исходный код и лицензии</a> · Windows-порт на основе Ruach Studio (Viktor Zhuromskyy).</footer>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const formIds = ["title","style","lyrics","duration","format","cot","steps","lmSeed","seed","instrumental"];
+const key = "ruach.windows.form.v1", jobKey = "ruach.windows.job.v1";
+let online = false, activeJob = null, polling = false;
+function saveForm() {
+  const data = {};
+  formIds.forEach(id => data[id] = id === "instrumental" ? $(id).checked : $(id).value);
+  try { localStorage.setItem(key, JSON.stringify(data)); } catch (_) {}
+}
+try {
+  const data = JSON.parse(localStorage.getItem(key) || "{}");
+  formIds.forEach(id => { if (data[id] !== undefined) { if (id === "instrumental") $(id).checked = !!data[id]; else $(id).value = data[id]; } });
+  activeJob = JSON.parse(localStorage.getItem(jobKey) || "null");
+} catch (_) {}
+
+const styleTagGroups = [
+  {id:"genres",label:"Жанры",tags:[
+    ["pop","Поп","pop"],["rock","Рок","rock"],["indie","Инди-поп","indie pop"],["synthpop","Синт-поп","synth-pop"],
+    ["disco","Диско","disco"],["funk","Фанк","funk"],["jazz","Джаз","jazz"],["blues","Блюз","blues"],["soul","Соул","soul"],
+    ["hiphop","Хип-хоп","hip hop"],["lofi","Лоу-фай","lo-fi hip hop"],["ambient","Эмбиент","ambient"],
+    ["folk","Фолк","folk"],["country","Кантри","country"],["orchestral","Оркестр","cinematic orchestral"],
+    ["house","Хаус","house"],["techno","Техно","techno"],["dnb","Драм-н-бейс","drum and bass"],["reggae","Регги","reggae"],
+    ["latin","Латино","latin pop"],["metal","Метал","heavy metal"]
+  ]},
+  {id:"moods",label:"Настроение",tags:[
+    ["calm","Спокойно","calm"],["uplifting","Воодушевляюще","uplifting"],["energetic","Энергично","energetic"],
+    ["melancholic","Меланхолично","melancholic"],["dreamy","Мечтательно","dreamy"],["romantic","Романтично","romantic"],
+    ["nostalgic","Ностальгично","nostalgic"],["dark","Мрачно","dark"],["playful","Игриво","playful"],["warm","Тепло","warm"]
+  ]},
+  {id:"sounds",label:"Инструменты",tags:[
+    ["piano","Пианино","piano"],["acoustic","Акустическая гитара","acoustic guitar"],["electric","Электрогитара","electric guitar"],
+    ["bass","Бас","bass"],["drums","Барабаны","drums"],["synth","Синтезаторы","synthesizers"],["pads","Атмосферные пэды","atmospheric pads"],
+    ["strings","Струнные","strings"],["violin","Скрипка","violin"],["sax","Саксофон","saxophone"],["flute","Флейта","flute"],
+    ["brass","Духовые","brass"],["percussion","Перкуссия","percussion"],["drummachine","Драм-машина","drum machine"]
+  ]},
+  {id:"vocals",label:"Вокал",tags:[
+    ["female","Женский вокал","female vocals"],["male","Мужской вокал","male vocals"],["softvoice","Мягкий вокал","soft vocals"],
+    ["powerfulvoice","Сильный вокал","powerful vocals"],["duet","Дуэт","male and female duet"],
+    ["choir","Хор","choir"],["backing","Бэк-вокал","backing vocals"],["novocals","Без вокала","no vocals"]
+  ]},
+  {id:"features",label:"Особенности",tags:[
+    ["slow","Медленно","slow tempo"],["midtempo","Средний темп","midtempo"],["upbeat","Бодрый темп","upbeat tempo"],
+    ["minimal","Минимализм","minimalist arrangement"],["live","Живое звучание","live band"],["analog","Аналоговая теплота","warm analog sound"],
+    ["reverb","Пространство","spacious reverb"],["groove","Выраженный грув","groovy rhythm"],["catchy","Цепкая мелодия","catchy melody"],
+    ["build","Постепенное развитие","gradual build-up"],["intimate","Камерное звучание","intimate production"]
+  ]}
+];
+const styleTagById = new Map(styleTagGroups.flatMap(group => group.tags).map(tag => [tag[0],tag]));
+// Each genre chooses compatible sounds, mood, pace and vocal delivery.
+const randomStyleProfiles = [
+  ["pop",["uplifting","romantic","playful"],["piano","acoustic","bass","drums"],["midtempo","upbeat"],["catchy","analog"],["clear female vocals","warm male vocals"]],
+  ["rock",["energetic","uplifting","dark"],["electric","bass","drums"],["midtempo","upbeat"],["live","catchy"],["powerful male vocals","expressive female vocals"]],
+  ["indie",["dreamy","nostalgic","melancholic"],["acoustic","electric","piano","bass"],["slow","midtempo"],["intimate","reverb"],["soft female vocals","gentle male vocals"]],
+  ["synthpop",["dreamy","energetic","nostalgic"],["synth","pads","drummachine","bass"],["midtempo","upbeat"],["catchy","analog"],["clear female vocals","smooth male vocals"]],
+  ["disco",["playful","energetic","uplifting"],["bass","drums","strings","synth"],["upbeat"],["groove","catchy"],["expressive female vocals","bright male vocals"]],
+  ["funk",["playful","energetic"],["bass","electric","drums","brass"],["midtempo","upbeat"],["groove","live"],["soulful male vocals","soulful female vocals"]],
+  ["jazz",["warm","calm","romantic"],["piano","bass","sax","drums"],["slow","midtempo"],["live","intimate"],["soft female vocals","warm male vocals"]],
+  ["blues",["melancholic","warm","nostalgic"],["electric","piano","bass","drums"],["slow","midtempo"],["live","analog"],["expressive male vocals","soulful female vocals"]],
+  ["soul",["warm","romantic","melancholic"],["piano","bass","drums","strings"],["slow","midtempo"],["analog","intimate"],["soulful female vocals","warm male vocals"]],
+  ["hiphop",["energetic","dark","nostalgic"],["bass","drummachine","piano","synth"],["midtempo"],["groove","minimal"],["rhythmic male rap vocals","rhythmic female rap vocals"]],
+  ["lofi",["calm","nostalgic","melancholic"],["piano","bass","drummachine","acoustic"],["slow","midtempo"],["analog","intimate"],["soft female vocals","gentle male vocals"]],
+  ["ambient",["calm","dreamy","melancholic"],["pads","piano","strings","flute"],["slow"],["minimal","reverb"],["soft female vocals","soft male vocals"]],
+  ["folk",["warm","nostalgic","romantic"],["acoustic","violin","flute","percussion"],["slow","midtempo"],["live","intimate"],["gentle female vocals","warm male vocals"]],
+  ["country",["uplifting","nostalgic","romantic"],["acoustic","electric","violin","drums"],["midtempo","upbeat"],["live","catchy"],["warm male vocals","clear female vocals"]],
+  ["orchestral",["uplifting","dark","dreamy"],["strings","brass","piano","percussion"],["slow","midtempo"],["build","reverb"],["expressive female vocals","dramatic male vocals"]],
+  ["house",["energetic","uplifting","dreamy"],["synth","bass","drummachine","pads"],["upbeat"],["groove","catchy"],["clear female vocals","smooth male vocals"]],
+  ["techno",["dark","energetic"],["synth","drummachine","bass","pads"],["upbeat"],["minimal","groove"],["rhythmic male vocals","rhythmic female vocals"]],
+  ["dnb",["energetic","dreamy","dark"],["drummachine","bass","synth","pads"],["upbeat"],["groove","reverb"],["clear female vocals","smooth male vocals"]],
+  ["reggae",["warm","playful","uplifting"],["electric","bass","drums","percussion"],["midtempo"],["groove","live"],["warm male vocals","soulful female vocals"]],
+  ["latin",["romantic","playful","uplifting"],["acoustic","percussion","bass","brass"],["midtempo","upbeat"],["groove","catchy"],["expressive female vocals","warm male vocals"]],
+  ["metal",["dark","energetic"],["electric","bass","drums"],["upbeat"],["live","build"],["powerful male vocals","powerful female vocals"]]
+];
+let styleCategory = "genres", lastRandomStyle = "";
+function normalizedStyle(value) {
+  return value.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim();
+}
+function styleHasTag(value) { return (" "+normalizedStyle($("style").value)+" ").includes(" "+normalizedStyle(value)+" "); }
+function syncStyleTags() {
+  document.querySelectorAll("#styleTagPanel .tag-chip").forEach(button => {
+    const selected = styleHasTag(button.dataset.value);
+    button.classList.toggle("selected",selected);
+    button.setAttribute("aria-pressed",String(selected));
+  });
+}
+function renderStyleTags() {
+  const group = styleTagGroups.find(item => item.id === styleCategory);
+  const panel = $("styleTagPanel"); panel.replaceChildren(); panel.setAttribute("aria-labelledby","styleCategory-"+group.id);
+  document.querySelectorAll(".tag-category").forEach(button => {
+    const selected = button.dataset.category === group.id;
+    button.setAttribute("aria-selected",String(selected)); button.tabIndex = selected ? 0 : -1;
+  });
+  group.tags.forEach(([id,label,value]) => {
+    const button = document.createElement("button"); button.type = "button"; button.className = "tag-chip";
+    button.dataset.tagId = id; button.dataset.value = value; button.textContent = label; button.title = value;
+    button.addEventListener("click",() => addStyleTag(id)); panel.append(button);
+  });
+  syncStyleTags();
+}
+function addStyleTag(id) {
+  const [,label,value] = styleTagById.get(id), field = $("style");
+  if (styleHasTag(value)) { $("styleFeedback").textContent = "«"+label+"» уже в описании."; return; }
+  const current = field.value;
+  const separator = !current.trim() ? "" : /[,;\n]\s*$/.test(current) ? (/\s$/.test(current) ? "" : " ") : ", ";
+  const next = (current.trim() ? current : "") + separator + value;
+  if (next.length > field.maxLength) { $("styleFeedback").textContent = "В описании мало места. Сократите его, чтобы добавить тег."; return; }
+  field.value = next; field.dispatchEvent(new Event("input",{bubbles:true}));
+  $("styleFeedback").textContent = "Добавлено: «"+label+"».";
+}
+function pickStyleItem(items) { return items[Math.floor(Math.random()*items.length)]; }
+function createRandomStyle() {
+  let result = "";
+  for (let attempt=0;attempt<8;attempt++) {
+    const [genre,moods,sounds,tempos,features,voices] = pickStyleItem(randomStyleProfiles);
+    const available = sounds.slice(), first = available.splice(Math.floor(Math.random()*available.length),1)[0];
+    const second = pickStyleItem(available);
+    const ids = [genre,pickStyleItem(moods),first,second,pickStyleItem(tempos),pickStyleItem(features)];
+    const values = ids.map(id => styleTagById.get(id)[2]);
+    values.push($("instrumental").checked ? "instrumental, no vocals" : pickStyleItem(voices));
+    result = values.join(", ");
+    if (normalizedStyle(result)!==normalizedStyle(lastRandomStyle) && normalizedStyle(result)!==normalizedStyle($("style").value)) break;
+  }
+  lastRandomStyle = result; $("style").value = result; $("style").dispatchEvent(new Event("input",{bubbles:true}));
+  $("styleFeedback").textContent = "Случайное сочетание готово. Любой тег или слово можно изменить вручную.";
+}
+function setupStylePicker() {
+  styleTagGroups.forEach((group,index) => {
+    const button = document.createElement("button"); button.type = "button"; button.className = "tag-category";
+    button.id = "styleCategory-"+group.id; button.dataset.category = group.id; button.textContent = group.label;
+    button.setAttribute("role","tab"); button.setAttribute("aria-controls","styleTagPanel");
+    button.addEventListener("click",() => { styleCategory = group.id; renderStyleTags(); });
+    button.addEventListener("keydown",event => {
+      let next = index;
+      if(event.key==="ArrowRight") next=(index+1)%styleTagGroups.length;
+      else if(event.key==="ArrowLeft") next=(index+styleTagGroups.length-1)%styleTagGroups.length;
+      else if(event.key==="Home") next=0;
+      else if(event.key==="End") next=styleTagGroups.length-1;
+      else return;
+      event.preventDefault(); const target=$("styleCategory-"+styleTagGroups[next].id); target.click(); target.focus();
+    });
+    $("styleCategories").append(button);
+  });
+  $("randomStyle").addEventListener("click",createRandomStyle); renderStyleTags();
+}
+
+function updateControls() { $("generate").disabled = !online || !!activeJob; $("cancel").disabled = !online || !activeJob; $("progress").hidden = !activeJob; }
+function toggleLyrics() { $("lyricsFields").hidden = $("instrumental").checked; }
+toggleLyrics();
+$("form").addEventListener("input", () => { toggleLyrics(); syncStyleTags(); saveForm(); });
+async function api(path, options) {
+  const response = await fetch(path, {cache:"no-store", ...options, signal:AbortSignal.timeout(30000)});
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || ("Ошибка сервера: " + response.status));
+  return data;
+}
+function setJob(job) {
+  activeJob = job;
+  try { if (job) localStorage.setItem(jobKey, JSON.stringify(job)); else localStorage.removeItem(jobKey); } catch (_) {}
+  updateControls();
+}
+function text(message, error = "") { $("status").textContent = message; $("error").textContent = error; }
+async function refreshLibrary() {
+  const data = await api("/library");
+  const takes = Array.isArray(data.takes) ? data.takes : [];
+  $("count").textContent = takes.length ? String(takes.length) : "";
+  const library = $("library"); library.replaceChildren();
+  if (!takes.length) { const empty = document.createElement("div"); empty.className = "empty"; empty.textContent = "Здесь появится ваша первая композиция."; library.append(empty); return; }
+  takes.forEach(take => {
+    const card = document.createElement("article"); card.className = "take";
+    const title = document.createElement("p"); title.className = "take-title"; title.textContent = take.title || take.name;
+    const meta = document.createElement("p"); meta.className = "take-meta";
+    meta.textContent = Math.round(Number(take.seconds) || 0) + " сек · " + (take.format || "аудио").toUpperCase();
+    const audio = document.createElement("audio"); audio.controls = true; audio.preload = "none"; audio.src = "/library/audio?name=" + encodeURIComponent(take.name);
+    const links = document.createElement("div"); links.className = "take-links";
+    const download = document.createElement("a"); download.href = audio.src; download.download = (take.title || take.name) + "." + (take.format === "mp3" ? "mp3" : "wav"); download.textContent = "Скачать аудио";
+    links.append(download); card.append(title, meta, audio, links); library.append(card);
+  });
+}
+async function pollJob() {
+  if (!activeJob || polling || !online) return;
+  polling = true;
+  try {
+    const current = activeJob;
+    const result = await api("/job?id=" + encodeURIComponent(current.id));
+    if (!activeJob || activeJob.id !== current.id) return;
+    const elapsed = Math.floor((Date.now() - current.started) / 1000);
+    if (result.status === "done") {
+      setJob(null);
+      text("Композиция готова. Seed музыки: " + result.lm_seed + " · Seed звучания: " + result.seed);
+      if (result.abc) { $("score").textContent = result.abc; $("scoreDetails").hidden = false; }
+      await refreshLibrary();
+    } else if (result.status === "failed" || result.status === "cancelled") {
+      setJob(null); text(result.status === "cancelled" ? "Генерация остановлена." : "Не удалось создать композицию.", result.error || "");
+    } else text((result.status === "queued" ? "Ожидает своей очереди" : "Создаём музыку") + " · " + elapsed + " сек");
+  } catch (error) {
+    if (/job not found/.test(error.message)) { setJob(null); text("Задание больше не найдено. Обновите библиотеку перед повторным запуском."); }
+    else $("error").textContent = "Не удалось прочитать состояние: " + error.message;
+  } finally { polling = false; }
+}
+async function checkConnection() {
+  try {
+    const health = await api("/health");
+    online = health.status === "ok";
+    $("connection").classList.toggle("online", online);
+    $("connectionText").textContent = online ? "Студия подключена" : "Студия недоступна";
+    if (online && !activeJob && $("status").textContent === "Ожидаем подключение к студии.") text("Готово к первой композиции.");
+  } catch (_) { online = false; $("connection").classList.remove("online"); $("connectionText").textContent = "Нет подключения"; }
+  updateControls(); if (online) pollJob();
+}
+$("form").addEventListener("submit", async event => {
+  event.preventDefault(); if (!online || activeJob) return;
+  if (!$("instrumental").checked && !$("lyrics").value.trim()) { text("Добавьте текст песни или включите инструментальную композицию."); $("lyrics").focus(); return; }
+  const body = {
+    title:$("title").value.trim(), style:($("instrumental").checked ? "Instrumental, no vocals, " : "") + $("style").value.trim(),
+    lyrics:$("instrumental").checked ? "[instrumental]" : $("lyrics").value.trim(),
+    duration:Number($("duration").value), cot:$("cot").value, steps:Number($("steps").value),
+    seed:Number($("seed").value), lm_seed:Number($("lmSeed").value), lm_batch_size:1, synth_batch_size:1, output_format:$("format").value
+  };
+  $("generate").disabled = true; $("error").textContent = ""; $("scoreDetails").hidden = true; saveForm();
+  try {
+    const job = await api("/synth", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    if (!job.id) throw new Error("Сервер не вернул номер задания.");
+    setJob({id:job.id,started:Date.now()}); text("Задание принято. Первый запуск может занять больше времени."); pollJob();
+  } catch (error) { text("Запрос не подтверждён. Проверьте библиотеку перед повтором.", error.message); updateControls(); }
+});
+$("cancel").addEventListener("click", async () => {
+  if (!activeJob) return;
+  $("cancel").disabled = true;
+  try { await api("/job?id=" + encodeURIComponent(activeJob.id) + "&cancel=1", {method:"POST"}); text("Останавливаем генерацию…"); }
+  catch (error) { $("error").textContent = error.message; }
+});
+$("refresh").addEventListener("click", () => refreshLibrary().catch(error => text("Не удалось обновить библиотеку.", error.message)));
+$("example").addEventListener("click", () => {
+  $("title").value = "Первый дубль"; $("style").value = "Solo piano, calm, spacious, gentle melody"; $("instrumental").checked = true;
+  $("duration").value = "20"; $("cot").value = "off"; $("steps").value = "16"; toggleLyrics(); syncStyleTags(); saveForm(); $("style").focus();
+});
+setupStylePicker();
+checkConnection().then(() => { if (online) refreshLibrary().catch(error => text("Не удалось прочитать библиотеку.", error.message)); });
+setInterval(checkConnection, 5000); setInterval(pollJob, 2000);
+</script>
+</body>
+</html>
