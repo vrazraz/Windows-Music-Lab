@@ -1,0 +1,18 @@
+# Native Windows Artist candidate, Python 3.10 x64. Requires explicit approval
+# before installation. Wheel metadata is recorded in full-art-dependencies.json.
+# Official CUDA wheels; no Triton/NCCL/Linux-only packages and no remote kernels.
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.11.0+cu128
+torchvision==0.26.0+cu128
+diffusers==0.41.0
+transformers==5.19.0
+accelerate==1.15.0
+peft==0.21.2
+safetensors==0.8.0
+numpy==2.2.6
+Pillow==12.3.0
+scipy==1.15.3
+spandrel==0.4.2
+# GGUF and Krea/Qwen loaders remain available when their models are approved.
+gguf==0.19.0
+kernels==0.17.2

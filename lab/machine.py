@@ -4,10 +4,13 @@ start (and Engine → Compute's «Scan the machine» after it): each card's name
 BF16 tensor cores: BF16 runs there, slower than Q8_0), its VRAM limit (Engine → GPUs), the studio's card. Imported by lab.py,
 which adds the painter that fits (GET /machine)."""
 import subprocess
+from pathlib import Path
+import shutil
+import platform_runtime as runtime
 
 
 def _smi(fields):
-    q = subprocess.run(["nvidia-smi", "--query-gpu=" + fields, "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=20)
+    q = runtime.run_process([runtime.nvidia_smi(), "--query-gpu=" + fields, "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=20)
     if q.returncode != 0:
         raise RuntimeError((q.stderr or q.stdout).strip()[:200] or "nvidia-smi failed")
     return [[c.strip() for c in line.split(",")] for line in q.stdout.strip().splitlines() if line.strip()]
@@ -36,3 +39,8 @@ def has_bf16_cores(compute):
         return float(compute) >= 8.0
     except (TypeError, ValueError):
         return True
+
+
+def resources(root):
+    """Native RAM/commit/disk snapshot before a heavy local job."""
+    return {"memory": runtime.system_memory(), "disk": dict(zip(("total", "used", "free"), shutil.disk_usage(Path(root)))), "platform": "windows" if runtime.WINDOWS else "posix"}

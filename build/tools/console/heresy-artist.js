@@ -12,7 +12,7 @@
     { id: "16:9", label: "16:9 · 1920×1080", say: "a video", w: 16, h: 9, s: 47 },
     { id: "9:16", label: "9:16 · 1080×1920", say: "a short", w: 9, h: 16, s: 47 }
   ];
-  var PAINTERS = { "krea2-q4": "Krea 2 Muse · Q4", "krea2-q8": "Krea 2 Muse · Q8" };
+  var PAINTERS = { "krea2-q4": "Krea 2 Muse · Q4", "sdxl": "SDXL (local, CPU offload)", "krea2-q8": "Krea 2 Muse · Q8" };
   var PAINTER_INFO = {};                                 // HERESY 1318: the lab's word on each painter (need, family, note, models)
   // HERESY 1334: the Artist's own log (the dock's Artist view), what it is asked and what comes of it
   function alog(text, kind) { if (window.RuachArtistLog) window.RuachArtistLog.add(text, kind); }
@@ -74,7 +74,7 @@
     var pk = $("arPainter").value, ps = sampNow(pk);   // HERESY 1319: the time follows the steps
     if (/^krea2/.test(pk)) secs = 25 + (secs - 25) * (+ps.steps || 8) / 8 * sampLooks(ps);   // HERESY 1333: and its looks a step
     if (/^qwen/.test(pk)) secs = 90 + n * (pk === "qwen21" ? 3 * (+ps.steps || 30) : 3.5 * (+ps.steps || 8) * (sampFast(pk, ps) ? 1 : 2) * sampLooks(ps));   // HERESY 1318: its parts; 1328: the switch; 1333: its looks first, then each picture
-    $("arCost").textContent = n ? tr((n === 1 ? "1 picture" : n + " pictures") + " · " + minutes(secs) + " on one card") : tr("pick a shape");   // HERESY 1339: one sentence
+    $("arCost").textContent = pk === "sdxl" && n ? tr((n === 1 ? "1 picture" : n + " pictures") + " · local inference; time depends on hardware") : n ? tr((n === 1 ? "1 picture" : n + " pictures") + " · " + minutes(secs) + " on one card") : tr("pick a shape");   // HERESY 1339: one sentence
     // HERESY 1340 (Viktor: «разреши батчинг/очередь до двух батчей»): Draw draws while a run goes, the second run waiting behind it,
     // two at a time; Stop is a button of its own (1270's: the drawing run, else the waiting one)
     var busy = drawingRun(), full = runsFull();
@@ -82,7 +82,8 @@
     $("arDraw").dataset.tip = full ? tr("Two runs at a time: the next one can be asked when one of them ends")
       : busy ? tr("Draw these too: the run waits behind the one going now (two runs at a time; Ctrl+Enter)")
       : tr("Draw the pictures picked: every shape, every variation (Ctrl+Enter)");   // HERESY 1332: a tip of its own, not an empty one
-    $("arDraw").disabled = full || !n || !$("arPrompt").value.trim() || state.sending;
+    $("arDraw").disabled = full || !n || !$("arPrompt").value.trim() || state.sending || state.noPainters;
+    if (state.noPainters) $("arDraw").dataset.tip = tr("Install approved local Artist models first");
     $("arStop").hidden = !busy;
     $("arStop").disabled = !!state.stopping;
     $("arStop").dataset.tip = tr("Stop the run: a waiting one leaves the queue, a drawing one ends now; the pictures it finished stay");
@@ -90,10 +91,14 @@
   }
   // HERESY 1319: the sampling per painter (kept in this browser), its limits by the painter; only what differs from the painter's own is sent
   KEY.sampling = "yue2.arSampling";
+  KEY.resolution = "yue2.arResolution";
   // HERESY 1328: Lightning is a switch (lightOn) and a strength (lightning, kept while it is off); a fine-tune paints without it by
   // default (30 steps, guidance 4), a GGUF one with it; a painter whose Lightning file is not here has no switch at all
   function lightHere(key) { var p = PAINTER_INFO[key] || {}; return /^qwen2512/.test(key) && p.lightning !== false; }
   function sampDefaults(key) {
+    var profile = PAINTER_INFO[key] || {};
+    if (profile.defaults) return Object.assign({}, profile.defaults);
+    if (key === "sdxl") return { steps: 28, cfg: 5.5, sampler: "dpmpp", schedule: "simple" };
     var fine = key === "qwen2512-fp8";
     if (/^qwen2512/.test(key)) {
       var on = !fine && lightHere(key);
@@ -103,7 +108,18 @@
     return { steps: 8, sampler: "euler", schedule: "simple" };
   }
   function sampAll() { try { var a = JSON.parse(recall(KEY.sampling) || "{}"); return a && typeof a === "object" ? a : {}; } catch (e) { return {}; } }
-  function sampLim(key, s) { return sampFast(key, s) ? [4, 16] : [10, 60]; }
+  function sampLim(key, s) { return (PAINTER_INFO[key] || {}).step_limits || (sampFast(key, s) ? [4, 16] : [10, 60]); }
+  var SAMPLER_NAMES = { euler: "Euler", "euler-sde": "Euler SDE", er_sde: "ER-SDE", res_2s: "RES 2s", res_2s_ode: "RES 2s ODE", res_3s: "RES 3s", res_3s_ode: "RES 3s ODE", heunpp2: "Heun++ 2", exp_heun_2_x0: "Exp Heun 2 x0", exp_heun_2_x0_sde: "Exp Heun 2 x0 SDE", dpmpp: "DPM++", heun: "Heun" };
+  var SCHEDULE_NAMES = { simple: "Simple", karras: "Karras", exponential: "Exponential", beta: "Beta", beta57: "Beta 57", kl_optimal: "KL optimal", sgm_uniform: "SGM uniform", bong_tangent: "Bong tangent" };
+  function sampleChoices(key, type, value) {
+    var p = PAINTER_INFO[key] || {}, defaults = type === "samplers" ? Object.keys(SAMPLER_NAMES).filter(function (v) { return v !== "dpmpp" && v !== "heun"; }) : Object.keys(SCHEDULE_NAMES);
+    var values = (p[type] || (key === "sdxl" ? (type === "samplers" ? ["euler", "euler-sde", "dpmpp", "heun"] : ["simple", "karras"]) : defaults)).slice();
+    if (key === "sdxl" && type === "schedules" && (value || {}).sampler !== "dpmpp") values = values.filter(function (v) { return v !== "karras"; });
+    return values;
+  }
+  function paintSampleMenu(id, values, names) {
+    $(id).innerHTML = values.map(function (v) { return '<option value="' + esc(v) + '">' + esc(names[v] || v) + '</option>'; }).join("");
+  }
   function sampNow(key) {
     key = key || $("arPainter").value;
     var mine = sampAll()[key] || {}, s = Object.assign(sampDefaults(key), mine);
@@ -112,6 +128,11 @@
       if (!(+s.lightning > 0)) s.lightning = sampDefaults(key).lightning;
       if (!lightHere(key)) s.lightOn = false;
     }
+    var samples = sampleChoices(key, "samplers", s), schedules;
+    if (samples.indexOf(s.sampler) < 0) s.sampler = sampDefaults(key).sampler;
+    schedules = sampleChoices(key, "schedules", s);
+    if (schedules.indexOf(s.schedule) < 0) s.schedule = "simple";
+    if (key === "sdxl") s.cfg = Math.max(1, Math.min(10, +s.cfg || 5.5));
     var lim = sampLim(key, s);
     s.steps = Math.max(lim[0], Math.min(lim[1], Math.round(+s.steps) || lim[0]));   // within the range it is sent in
     return s;
@@ -121,17 +142,20 @@
   function sampLooks(s) { return LOOKS[(s || {}).sampler] || 1; }
   function sampFast(key, s) { return /^krea2/.test(key) || (/^qwen2512/.test(key) && !!s.lightOn && +s.lightning > 0); }
   function sampSay(key, s) {
-    var q = /^qwen2512/.test(key), names = { euler: "Euler", "euler-sde": "Euler SDE", simple: "Simple", karras: "Karras", exponential: "Exponential", beta: "Beta",
+    var q = /^qwen2512/.test(key), names = { dpmpp: "DPM++", heun: "Heun", euler: "Euler", "euler-sde": "Euler SDE", simple: "Simple", karras: "Karras", exponential: "Exponential", beta: "Beta",
       er_sde: "ER-SDE", res_2s: "RES 2s", res_2s_ode: "RES 2s ODE", res_3s: "RES 3s", res_3s_ode: "RES 3s ODE", heunpp2: "Heun++ 2", exp_heun_2_x0: "Exp Heun 2 x0",
       exp_heun_2_x0_sde: "Exp Heun 2 x0 SDE", beta57: "Beta 57", kl_optimal: "KL optimal", sgm_uniform: "SGM uniform", bong_tangent: "Bong tangent" };   // HERESY 1333
     return tr(s.steps + " steps · " + names[s.sampler || "euler"] + " · " + names[s.schedule || "simple"] +   // HERESY 1339: one sentence («8 шагов»)
-      (q ? (sampFast(key, s) ? " · Lightning " + (+s.lightning).toFixed(2) : " · guidance " + (s.cfg || 4)) : ""));
+      (key === "sdxl" ? " · guidance " + (s.cfg || 5.5) : q ? (sampFast(key, s) ? " · Lightning " + (+s.lightning).toFixed(2) : " · guidance " + (s.cfg || 4)) : ""));
   }
   function paintSampling() {
     var key = $("arPainter").value, s = sampNow(key), lim = sampLim(key, s), q = /^qwen2512/.test(key), fast = sampFast(key, s);
     $("arSteps").min = String(lim[0]); $("arSteps").max = String(lim[1]); $("arSteps").value = String(s.steps);
+    paintSampleMenu("arSampler", sampleChoices(key, "samplers", s), SAMPLER_NAMES);
+    paintSampleMenu("arSchedule", sampleChoices(key, "schedules", s), SCHEDULE_NAMES);
     $("arSampler").value = s.sampler || "euler"; $("arSchedule").value = s.schedule || "simple";
-    $("arLightBox").hidden = !(q && lightHere(key)); $("arCfgBox").hidden = !(q && !fast);
+    $("arLightBox").hidden = !(q && lightHere(key)); $("arCfgBox").hidden = !(key === "sdxl" || q && !fast);
+    if (key === "sdxl") $("arCfg").value = String(s.cfg || 5.5);
     if (q) { $("arLightOn").checked = !!s.lightOn; $("arLight").value = (+s.lightning).toFixed(2); $("arLight").disabled = !s.lightOn; $("arCfg").value = String(s.cfg || 4); }
     $("arSampSay").textContent = sampSay(key, s);
     // HERESY 1333: what the sampling matrix showed (10.10.2026, 30 pictures): Lightning under Karras or Exponential paints the subject twice;
@@ -149,7 +173,13 @@
       s.lightning = Math.max(0.05, Math.min(1.5, +(+$("arLight").value).toFixed(2) || was.lightning));
       s.cfg = Math.max(1, Math.min(10, +$("arCfg").value || 4));
     }
+    if (key === "sdxl") s.cfg = Math.max(1, Math.min(10, +$("arCfg").value || 5.5));
     if (q && sampFast(key, s) !== sampFast(key, was)) s.steps = sampFast(key, s) ? (key === "qwen2512-fp8" ? 12 : 8) : 30;   // Lightning on or off: steps in its range
+    var samples = sampleChoices(key, "samplers", s), schedules;
+    if (samples.indexOf(s.sampler) < 0) s.sampler = sampDefaults(key).sampler;
+    schedules = sampleChoices(key, "schedules", s);
+    if (schedules.indexOf(s.schedule) < 0) s.schedule = "simple";
+    if (key === "sdxl") s.cfg = Math.max(1, Math.min(10, +s.cfg || 5.5));
     var lim = sampLim(key, s);
     s.steps = Math.max(lim[0], Math.min(lim[1], Math.round(s.steps) || lim[0]));
     all[key] = s;
@@ -163,7 +193,7 @@
     if (/^qwen2512/.test(key)) {
       if (sampFast(key, s)) delete out.cfg;
       if (Object.keys(out).length || !!s.lightOn !== !!d.lightOn || (s.lightOn && +s.lightning !== +d.lightning)) out.lightning = sampFast(key, s) ? +s.lightning : 0;   // the steps' range is Lightning's
-    } else delete out.cfg;
+    } else if (key !== "sdxl") delete out.cfg;
     return out;
   }
   // HERESY 1318: the painters as the lab has them; the fp8 fine-tune; the painter's note
@@ -172,17 +202,19 @@
       var sel = $("arPainter"), was = recall(KEY.painter) || sel.value || "krea2-q4", list = (d.painters || []).filter(function (p) { return p.ready; });
       // HERESY 1323: the painters not here yet (an fp8 fine-tune is the user's own file, not a fetch), said under the choice
       state.notHere = (d.painters || []).filter(function (p) { return !p.ready && p.key !== "qwen2512-fp8"; }).map(function (p) { return p.label; });
-      if (!list.length) return;
       PAINTER_INFO = {};
-      list.forEach(function (p) { PAINTERS[p.key] = p.label; PAINTER_INFO[p.key] = p; });
+      (d.painters || []).forEach(function (p) { PAINTERS[p.key] = p.label; PAINTER_INFO[p.key] = p; if (p.family) FAMILY[p.key] = p.family; });
+      state.noPainters = !list.length;
+      if (!list.length) { sel.innerHTML = '<option value="">' + esc(tr("No local Artist model")) + '</option>'; sel.value = ""; paintPainter(); return; }
       sel.innerHTML = list.map(function (p) {
         return '<option value="' + esc(p.key) + '">' + esc(p.label + " (" + tr("from " + (p.need_mb / 1000).toFixed(1).replace(".0", "") + " GB") + ")") + "</option>";
       }).join("");
-      sel.value = PAINTER_INFO[was] ? was : list[0].key;
+      sel.value = list.some(function (p) { return p.key === was; }) ? was : list[0].key;
       paintPainter();
     }).catch(function () { paintPainter(); });
   }
   function paintPainter() {
+    paintArtistHeading();
     var p = PAINTER_INFO[$("arPainter").value] || {}, box = $("arModelBox"), note = $("arPainterNote");
     if (box) {
       var models = p.models || [];
@@ -200,9 +232,54 @@
       note.dataset.tip = note.textContent;              // HERESY 1345: an i, its words in its tip
       note.classList.toggle("is-warn", p.key === "qwen21");
     }
+    paintResolution(p);
     paintLoras();
+    paintMaskProfile();
+    paintShapeTips(p);
     paintSampling();                                     // HERESY 1319
     paintForm();
+  }
+  function resolutionNow() { var control = $("arResolution"); return control && control.value === "512" ? 512 : 1024; }
+  function paintResolution(profile) {
+    var control = $("arResolution"), box = $("arResolutionBox");
+    if (!control) {
+      box = document.createElement("label"); box.className = "field ar-model"; box.id = "arResolutionBox";
+      box.innerHTML = '<span class="label">' + esc(tr("SDXL size")) + '</span><select id="arResolution"><option value="1024">1024 · ' + esc(tr("standard")) + '</option><option value="512">512 · ' + esc(tr("quick preview")) + '</option></select>';
+      $("arPainter").closest("label").insertAdjacentElement("afterend", box);
+      control = $("arResolution");
+      control.addEventListener("change", function () { keep(KEY.resolution, this.value); paintShapeTips(PAINTER_INFO[$("arPainter").value] || {}); paintForm(); });
+    }
+    box.hidden = $("arPainter").value !== "sdxl";
+    control.value = recall(KEY.resolution) === "512" ? "512" : "1024";
+    control.dataset.tip = tr("512 is a quick preview;1024 is the standard SDXL size. Wide and tall shapes keep their proportions.");
+  }
+  function differentialMask(key) { return key !== "sdxl" && key !== "qwen21" && (PAINTER_INFO[key] || {}).differential_mask !== false; }
+  function paintMaskProfile() {
+    var input = $("arMkSoft"), blocked = !differentialMask($("arPainter").value);
+    if (!input) return;
+    if (blocked && !input.disabled) state.maskSoftWanted = input.checked;
+    if (!blocked && input.disabled) input.checked = state.maskSoftWanted !== false;
+    if (blocked) input.checked = false;
+    input.disabled = blocked;
+    var reason = blocked ? tr($("arPainter").value === "sdxl" ? "Differential diffusion is available with Krea or Qwen 2512; SDXL keeps feathered mask edges" : "Differential diffusion is available with Krea or Qwen 2512") : "";
+    input.title = reason;
+    var label = input.closest("label");
+    if (label) { label.title = reason; label.dataset.tip = reason; label.classList.toggle("is-disabled", blocked); }
+  }
+  function paintShapeTips(profile) {
+    Array.prototype.forEach.call(document.querySelectorAll("#arShapes label"), function (label) {
+      var id = label.querySelector("input").value, sizes = (profile.resolutions_by_size || {})[String(resolutionNow())] || profile.resolutions || {}, size = sizes[id], shape = shapeOf(id);
+      var text = size ? id + " · " + size.join("×") : shape.label;
+      label.dataset.tip = text + " · " + tr("for " + shape.say);
+      label.setAttribute("aria-label", text);
+    });
+  }
+  function paintArtistHeading() {
+    var note = document.querySelector("#view-artist .artist-head .col-note-two");
+    if (!note) return;
+    var russian = /^ru/i.test(document.documentElement.lang || "");
+    note.setAttribute("translate", "no");
+    note.textContent = russian ? "Локальные изображения для ваших песен: квадратные, широкие и вертикальные — по вашему описанию" : "Local pictures for your songs: square, wide and tall, from your own prompt";
   }
   function keepForm() {
     keep(KEY.prompt, $("arPrompt").value);
@@ -219,6 +296,8 @@
     $("arCount").value = String(run.count || 1);
     $("arSeed").value = withSeed && run.seed != null ? String(run.seed) : "";
     if (PAINTERS[run.painter]) $("arPainter").value = run.painter;
+    if (run.painter === "sdxl") keep(KEY.resolution, String(run.resolution === 512 ? 512 : 1024));
+    paintPainter();
     if (run.model && !$("arModelBox").hidden) $("arModel").value = run.model;   // HERESY 1318
     if (PAINTERS[run.painter]) { var sa = sampAll(); if (run.sampling) { sa[run.painter] = Object.assign(sampDefaults(run.painter), run.sampling); if (run.sampling.lightning != null) { sa[run.painter].lightOn = +run.sampling.lightning > 0; if (!(+run.sampling.lightning > 0)) delete sa[run.painter].lightning; } } else delete sa[run.painter]; keep(KEY.sampling, JSON.stringify(sa)); paintSampling(); }   // HERESY 1319
     if (run.loras) setLoras(run.loras.map(function (l) { return { id: l.id, weight: l.weight }; }), FAMILY[run.painter]);   // HERESY 1316
@@ -258,9 +337,9 @@
   // маски»): the mask's options, kept in this browser
   function maskOpts() {
     return { grow: Math.max(-64, Math.min(128, Math.round(+$("arMkGrow").value || 0))), edge: Math.max(0, Math.min(96, Math.round(+$("arMkEdge").value || 0))),
-             soft: $("arMkSoft").checked, grain: Math.max(0, Math.min(0.6, +(+$("arMkGrain").value || 0).toFixed(2))) };
+             soft: differentialMask($("arPainter").value) && $("arMkSoft").checked, grain: Math.max(0, Math.min(0.6, +(+$("arMkGrain").value || 0).toFixed(2))) };
   }
-  function keepMaskOpts() { keep("yue2.arMaskOpts", JSON.stringify(maskOpts())); }
+  function keepMaskOpts() { var options = maskOpts(); if (!differentialMask($("arPainter").value)) options.soft = state.maskSoftWanted !== false; keep("yue2.arMaskOpts", JSON.stringify(options)); }
   function loadMaskOpts() {
     var o = null;
     try { o = JSON.parse(recall("yue2.arMaskOpts") || "null"); } catch (e) { o = null; }
@@ -483,6 +562,7 @@
     if (runsFull()) return toast(tr("Two runs at a time: the next one can be asked when one of them ends"), "bad");   // HERESY 1340
     var body = again ? { prompt: again.prompt, shapes: again.shapes, count: again.count, seed: null, painter: again.painter }
       : (function () { if (state.seedMode) state.seedMode.before(); return { prompt: $("arPrompt").value.trim(), shapes: shapesPicked(), count: +$("arCount").value || 1, seed: seedAsked(), painter: $("arPainter").value }; })();   // HERESY 1330: the seed as its mode wants it
+    if (body.painter === "sdxl") body.resolution = again ? (again.resolution === 512 ? 512 : 1024) : resolutionNow();
     if (again && again.model) body.model = again.model;                 // HERESY 1318: the fp8 fine-tune
     else if (!again && !$("arModelBox").hidden) body.model = $("arModel").value;
     // HERESY 1326 (Viktor 10.10.2026, 14:57: «ловлю ошибку. Хотя выбрано всё правильно»): 1319 put the sampling between the two
@@ -1321,7 +1401,7 @@
   // HERESY 1316 (Viktor 10.10.2026: «Положил в artwork/loras/<семейство>/»; «скан поддиректорий»; «возле адаптера лежит его картинка»;
   // «сканирование Civitai по хешу»; «Адаптеры пользователи пусть себе тянут по твоему Гайду прямо в комнате»): the adapters of the
   // painter's family, each at its strength, up to four, kept per family in this browser; the library to pick them from
-  var FAMILY = { "krea2-q4": "krea2", "krea2-q8": "krea2", "qwen21": "qwen-image-2.1", "qwen2512-q4": "qwen-image-2512", "qwen2512-q6": "qwen-image-2512", "qwen2512-fp8": "qwen-image-2512" };
+  var FAMILY = { "sdxl": "sdxl", "krea2-q4": "krea2", "krea2-q8": "krea2", "qwen21": "qwen-image-2.1", "qwen2512-q4": "qwen-image-2512", "qwen2512-q6": "qwen-image-2512", "qwen2512-fp8": "qwen-image-2512" };
   var LORA_MAX = 4;
   KEY.loras = "yue2.arLoras";
   function familyNow() { return FAMILY[$("arPainter").value] || ""; }
@@ -1662,7 +1742,7 @@
     edges();
     $("arLive").checked = recall(KEY.live) !== "0";
     $("arLive").addEventListener("change", function () { keep(KEY.live, this.checked ? null : "0"); });
-    window.addEventListener("ruach-lang", function () { paintForm(); paintHead(); paintRuns(); });
+    window.addEventListener("ruach-lang", function () { paintArtistHeading(); paintForm(); paintHead(); paintRuns(); });
     if (state.hooks.take) setTake(state.hooks.take()); else paintHead();
     paintForm();
   }
@@ -1673,6 +1753,6 @@
     compare: function () { return state.compare; }, picking: function () { return !!state.cmpA; } };  // 1308
   window.HeresyArtist = { init: init, reload: function () { state.pinSel = false; paintHead(); return load(); }, setTake: setTake,
     loras: { reload: loadLoras, now: lorasNow, set: setLoras, open: openLoraLib, lib: function () { return state.loraLibOpen; } },   // HERESY 1316: for the checks
-    painters: loadPainters, sampling: { now: sampNow, body: samplingBody, paint: paintSampling },   // HERESY 1318, 1319
+    resolution: { now: resolutionNow }, painters: loadPainters, sampling: { now: sampNow, body: samplingBody, paint: paintSampling },   // HERESY 1318, 1319
     canvas: { open: openCanvas, place: function () { return state.place; } } };   // HERESY 1346: for the checks
 })();

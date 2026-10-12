@@ -10,6 +10,7 @@
   var KEY = "yue2.updates", DAY = 86400000, EVERY = { day: DAY, week: 7 * DAY, month: 30 * DAY, never: 0 };
   var DEF = { every: "week", mode: "ask", rc: null, skip: "", asked: false, first: 0, seen: "", gems: "" };
   var S = { st: null, hooks: {}, watching: false };
+  function local(st) { st = st || S.st; return !!(st && (st.mode === "local" || st.lookup_disabled)); }
   function $(id) { return document.getElementById(id); }
   function prefs() {
     var p = {};
@@ -35,6 +36,19 @@
     if (!line) return;
     if (!st) { line.textContent = "Asking the lab…"; return; }
     var l = st.latest;
+    if (local(st)) {
+      line.textContent = "Windows Music Lab " + (st.current || "") + " — " + tr("Local-only mode; release lookup is disabled.");
+      $("updEvery").value = "never"; $("updEvery").disabled = true;
+      $("updMode").value = "ask"; $("updMode").disabled = true;
+      $("updRc").checked = false; $("updRc").disabled = true;
+      $("updCheck").textContent = tr("Refresh local status"); $("updCheck").disabled = false;
+      $("updWhy").textContent = st.why || tr("Update manually from https://github.com/vrazraz/Windows-Music-Lab after reviewing your local branch.");
+      $("updRun").hidden = true; $("updRun").disabled = true;
+      $("updNotes").hidden = false; $("updNotes").textContent = tr("Open fork repository");
+      return;
+    }
+    $("updEvery").disabled = false; $("updRc").disabled = false; $("updRun").disabled = false;
+    $("updCheck").textContent = tr("Check now"); $("updNotes").textContent = tr("Release notes");
     line.textContent = st.current === undefined ? "The lab does not answer: " + (st.error || "") :
       "Ruach Studio " + st.current + " · " + (st.error ? "could not ask GitHub: " + st.error : !st.checked ? "not looked yet" :
         (st.newer ? l.version + " is out" : "up to date") + ", looked " + ago(st.checked));
@@ -52,10 +66,11 @@
       function (e) { S.st = { error: e.message }; paint(); return null; });
   }
   function check(manual) {
+    if (local()) return refresh().then(function (st) { if (manual && st) toast(st.why || tr("Release lookup is disabled; update the fork manually.")); return st; });
     if ($("updCheck")) $("updCheck").disabled = true;
     return lab("/update", { check: true, rc: rcWanted(S.st) }).then(function (st) {
       S.st = st; paint();
-      if (manual) toast(st.error ? "Could not ask GitHub: " + st.error : st.newer ? "Ruach Studio " + st.latest.version + " is out" : "Up to date: " + st.current, st.error ? "bad" : "");
+      if (manual) toast(local(st) ? st.why || tr("Release lookup is disabled; update the fork manually.") : st.error ? "Could not ask GitHub: " + st.error : st.newer ? "Ruach Studio " + st.latest.version + " is out" : "Up to date: " + st.current, st.error ? "bad" : "");
       return st;
     }, function (e) { if (manual) toast("No answer: " + e.message, "bad"); return null; })
       .then(function (st) { if ($("updCheck")) $("updCheck").disabled = false; return st; });
@@ -65,6 +80,7 @@
     return t.length > 1400 ? t.slice(0, 1400).replace(/\s+\S*$/, "") + "…" : t;
   }
   function offer(st, fromCard) {
+    if (local(st) || local()) return Promise.resolve();
     var l = st.latest, p = prefs();
     var text = tr("Ruach Studio {0} is out").replace("{0}", l.version) + "\n\n" +   // HERESY 1339: the notes stay as written
       (l.candidate ? tr("A release candidate: everything in it works and was checked, the last polish comes in the release.") + "\n\n" : "") +
@@ -78,6 +94,7 @@
     });
   }
   function run(st) {
+    if (local(st) || local()) return Promise.resolve();
     if (S.hooks.idle && !S.hooks.idle()) { toast("A run is going: the update waits until nothing runs", "bad"); return; }
     return lab("/update", { run: st.latest.version }).then(function () {
       toast("Updating to " + st.latest.version + ": the studio builds it, then restarts");
@@ -85,7 +102,7 @@
     }, function (e) { toast("No update: " + e.message, "bad"); });
   }
   function watch(version) {                 // the update's last words in the card; back with the new version: the page reloads
-    if (S.watching) return;
+    if (local() || S.watching) return;
     S.watching = true;
     var t = setInterval(function () {
       lab("/update/log").then(function (d) { var last = (d.log || "").trim().split("\n").pop(); if (last && $("updWhy")) $("updWhy").textContent = last; }, function () {});
@@ -95,6 +112,7 @@
     }, 3000);
   }
   function askHowOften() {
+    if (local()) return Promise.resolve();
     return window.HeresyDialog.choose("How often should the studio look for a new release?\n\nIt asks GitHub for the list of its releases, nothing more. When one is out you are asked first; Engine → Updates can update by itself instead, and look whenever you ask.",
       [{ label: "Every week", value: "week", note: "recommended", current: true }, { label: "Every day", value: "day" }, { label: "Every month", value: "month" },
         { label: "Never", value: "never", note: "Engine → Updates looks when you ask" }], { cancel: "Ask me later" }).then(function (v) {
@@ -103,6 +121,7 @@
     });
   }
   function gems(st) {                       // the 💎 sets, on a new studio and after an update, until here or refused
+    if (local(st) || local()) return Promise.resolve();
     var p = prefs();
     if (p.gems === "never" || p.seen === st.current) return Promise.resolve();
     return lab("/collection/diamonds").then(function (d) {
@@ -119,20 +138,21 @@
     }, function () { /* no lab, no list: nothing to offer */ });
   }
   function due(st) {
+    if (local(st)) return false;
     var every = EVERY[prefs().every] || 0;
     return !!every && (!st.checked || Date.now() / 1000 - st.checked >= every / 1000);
   }
   function schedule() {
     var p = prefs();
-    if (!p.first) { p.first = Date.now(); keep(p); }
     return refresh().then(function (st) {
-      if (!st || st.current === undefined) return null;      // no lab: quiet
+      if (!st || st.current === undefined || local(st)) return null;
+      if (!p.first) { p.first = Date.now(); keep(p); }      // no lab: quiet
       return gems(st).then(function () {
         var q = prefs();
         return !q.asked && Date.now() - q.first >= DAY ? askHowOften() : null;
       }).then(function () { return due(st) ? check(false) : st; });
     }).then(function (st) {
-      if (!st || !st.newer || st.latest.version === prefs().skip) return;
+      if (!st || local(st) || !st.newer || st.latest.version === prefs().skip) return;
       if (prefs().mode === "auto" && st.can_run && (!S.hooks.idle || S.hooks.idle())) return run(st);
       return offer(st, false);
     }).catch(function () {});
@@ -147,6 +167,7 @@
       $("updRun").addEventListener("click", function () { if (S.st && S.st.newer) offer(S.st, true); });
       $("updNotes").addEventListener("click", function () {
         var l = S.st && S.st.latest;
+        if (local()) { window.open("https://github.com/vrazraz/Windows-Music-Lab", "_blank", "noopener"); return; }
         if (l) window.HeresyDialog.alert("Ruach Studio " + l.version + "\n\n" + said(l.notes) + (l.url ? "\n\n" + l.url : ""));
       });
     }

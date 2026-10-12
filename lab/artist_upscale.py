@@ -33,9 +33,10 @@ def models():
 
 
 def model_path(name):
-    name = str(name or "").replace("\\", "/").strip("/")
+    name = str(name or "").replace("\\", "/")
     p = UPSCALERS / name
-    if not name or ".." in name.split("/") or not p.is_file():
+    if (not name or name.startswith("/") or ":" in name or "\x00" in name or ".." in name.split("/")
+            or not p.resolve().is_relative_to(UPSCALERS.resolve()) or not p.is_file()):
         raise RuntimeError(f"no such upscaler in artwork/upscalers/: {name}")
     return p
 

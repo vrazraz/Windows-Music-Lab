@@ -7,7 +7,7 @@ has. A DAW on another computer (the browser on a laptop, the studio on a server)
 page lets the user name it.
 
     GET /daw     the DAWs known to the bridge, which are on this machine, where, which version"""
-import os, re, shutil
+import os, platform, re, shutil
 from pathlib import Path
 
 KNOWN = [
@@ -28,8 +28,30 @@ KNOWN = [
 ]
 
 
+def _windows_paths(d):
+    """Discover conventional native installations without launching a DAW."""
+    roots = [Path(p) for p in dict.fromkeys(os.environ.get(key, "")
+             for key in ("ProgramW6432", "ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA")) if p]
+    candidates = []
+    patterns = {
+        "reaper": ("REAPER*/reaper.exe", "Programs/REAPER*/reaper.exe"),
+        "waveform": ("Tracktion/Waveform*/Waveform*.exe", "Waveform*/Waveform*.exe",
+                     "Programs/Tracktion/Waveform*/Waveform*.exe"),
+        "bitwig": ("Bitwig Studio*/Bitwig Studio.exe", "Bitwig Studio/*/Bitwig Studio.exe",
+                   "Programs/Bitwig Studio*/Bitwig Studio.exe"),
+    }
+    for root in roots:
+        for pattern in patterns.get(d["id"], ()):
+            if root.is_dir():
+                candidates.extend(sorted(root.glob(pattern), reverse=True))
+    if d["id"] == "reaper" and os.environ.get("APPDATA"):
+        candidates.append(Path(os.environ["APPDATA"]) / "REAPER" / "reaper.exe")
+    return candidates
+
+
 def _found(d):
-    for p in d["paths"]:
+    paths = _windows_paths(d) if os.name == "nt" else d["paths"]
+    for p in paths:
         p = os.path.expanduser(p)
         if os.path.isfile(p) and os.access(p, os.X_OK):
             return p
@@ -48,12 +70,21 @@ def _version(d, path):
             m = re.match(r"v?(\d+\.\d+\S*)", first.strip())
             return m.group(1) if m else ""
         if d["id"] == "waveform":                      # the .deb's version, else the number in the program's name
+            if os.name == "nt":
+                for folder in Path(path).parents:
+                    m = re.fullmatch(r"Waveform\s*(\d{1,2})", folder.name, re.I)
+                    if m:
+                        return m.group(1)
+                return ""                              # Waveform64.exe is an architecture, not version 64
             m = re.search(r"(\d+)$", os.path.basename(path))
             status = Path("/var/lib/dpkg/status")
             if status.is_file() and m:
                 block = re.search(r"Package: waveform" + m.group(1) + r"\n(?:.+\n)*?Version: (\S+)", status.read_text(errors="replace"))
                 if block:
                     return block.group(1)
+            return m.group(1) if m else ""
+        if d["id"] == "bitwig" and os.name == "nt":
+            m = re.search(r"Bitwig Studio[ /\\-]+(\d+(?:\.\d+)+)", str(path), re.I)
             return m.group(1) if m else ""
     except (OSError, IndexError):
         return ""
@@ -62,8 +93,18 @@ def _version(d, path):
 
 def detect():
     out = []
+    windows_install = {
+        "reaper": "https://www.reaper.fm/download.php — native Windows installer or your existing portable install",
+        "waveform": "https://www.tracktion.com/products/waveform-free — native Windows release, version 14 or newer for DAWproject",
+        "bitwig": "https://www.bitwig.com/download/ — native Windows installer",
+    }
     for d in KNOWN:
         path = _found(d)
-        out.append({k: d[k] for k in ("id", "name", "by", "state", "licence", "install")} |
-                   {"here": bool(path), "path": path, "version": _version(d, path) if path else ""})
-    return {"daws": out, "host": os.uname().nodename}
+        item = {k: d[k] for k in ("id", "name", "by", "state", "licence", "install")}
+        if os.name == "nt":
+            item["install"] = windows_install[d["id"]]
+        item.update(here=bool(path), path=path, version=_version(d, path) if path else "")
+        if d["id"] == "waveform" and item["version"].isdigit() and int(item["version"]) < 14:
+            item.update(here=False, state="unsupported", reason="Waveform 14 or newer is required for DAWproject")
+        out.append(item)
+    return {"daws": out, "host": platform.node()}

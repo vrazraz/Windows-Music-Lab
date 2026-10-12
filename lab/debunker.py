@@ -285,7 +285,9 @@ def razdelit(fajl, model_imya=None, vyhod=None, format_="WAV"):
         from audio_separator.separator import Separator
     except ImportError as e:
         print(_cvet(f"  ⛔ ядро UVR не поднялось: {e}", K))
-        print(_cvet("     поставить:  Ruach_Studio/.venv/bin/pip install 'audio-separator[gpu]'", D))
+        advice = ("     Windows: see lab/AUDIO_WINDOWS.md for the approved local environment and separator weights."
+                  if os.name == "nt" else "     Install: Ruach_Studio/.venv/bin/pip install 'audio-separator[gpu]'")
+        print(_cvet(advice, D))
         return None
 
     modeli = najti_modeli()
@@ -432,7 +434,7 @@ def _duration(filepath):
     """Длительность в секундах или None."""
     r = subprocess.run(["ffprobe", "-v", "error", "-show_entries",
                         "format=duration", "-of", "csv=p=0", filepath],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
     try:
         return float(r.stdout.strip())
     except ValueError:
@@ -443,7 +445,7 @@ def measure_lufs(filepath):
     """Интегральная громкость в LUFS через ebur128, или None."""
     r = subprocess.run(["ffmpeg", "-v", "info", "-i", filepath,
                         "-af", "ebur128=framelog=quiet", "-f", "null", "-"],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
     for stroka in reversed(r.stderr.split("\n")):
         if "I:" in stroka and "LUFS" in stroka:
             try:
@@ -497,7 +499,7 @@ def compare_honest(file_a, file_b):
 # ============================================================
 def run_ffmpeg(args, desc=""):
     cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error"] + args
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if result.returncode != 0:
         print(_cvet(f"  ✗ FFMPEG ({desc}): {result.stderr[:300]}", K))
         return False
@@ -609,7 +611,7 @@ def apply_loudnorm(input_path, output_path, target_lufs=-14, target_tp=-1, lra=1
     print(f"  Громкость к {target_lufs} LUFS (два прохода)...")
     base = f"loudnorm=I={target_lufs}:LRA={lra}:TP={target_tp}"
     r = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", input_path, "-af",
-                        base + ":print_format=json", "-f", "null", "-"], capture_output=True, text=True)
+                        base + ":print_format=json", "-f", "null", "-"], capture_output=True, text=True, encoding="utf-8", errors="replace")
     m = None
     try:
         tail = r.stderr[r.stderr.rindex("{"):r.stderr.rindex("}") + 1]
@@ -658,7 +660,7 @@ def export_formats(input_path, output_dir, basename, formats=("wav", "flac", "mp
 
 def verify_metadata(filepath):
     r = subprocess.run(["ffprobe", "-v", "error", "-show_entries",
-                        "format_tags", filepath], capture_output=True, text=True)
+                        "format_tags", filepath], capture_output=True, text=True, encoding="utf-8", errors="replace")
     if r.stdout.strip() and "TAG:" in r.stdout:
         print(_cvet(f"  ⚠ остались метаданные: {os.path.basename(filepath)}", S))
         return False
@@ -670,7 +672,7 @@ def get_audio_info(filepath):
     r = subprocess.run(["ffprobe", "-v", "error", "-show_entries",
                         "format=duration,size,bit_rate", "-show_entries",
                         "stream=sample_rate,channels,codec_name", "-of", "json",
-                        filepath], capture_output=True, text=True)
+                        filepath], capture_output=True, text=True, encoding="utf-8", errors="replace")
     try:
         return json.loads(r.stdout)
     except json.JSONDecodeError:

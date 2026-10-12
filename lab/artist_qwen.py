@@ -121,7 +121,7 @@ def modules_of(ckpt):
     elif ckpt.is_dir():
         idx = next(iter(ckpt.glob("*.safetensors.index.json")), None)
         if idx:
-            names = list(json.load(open(idx, encoding="utf-8"))["weight_map"])
+            names = list(json.loads(Path(idx).read_text(encoding="utf-8"))["weight_map"])
         else:
             from safetensors import safe_open
             for f in ckpt.glob("*.safetensors"):
@@ -142,7 +142,7 @@ def fp8_transformer(f):
     from diffusers import QwenImageTransformer2DModel
     from safetensors import safe_open
     with init_empty_weights(include_buffers=False):          # the weights empty, the buffers (rotary frequencies) real
-        tr = QwenImageTransformer2DModel.from_config(QwenImageTransformer2DModel.load_config(str(Q2512 / "transformer")))
+        tr = QwenImageTransformer2DModel.from_config(QwenImageTransformer2DModel.load_config(str(Q2512 / "transformer"), local_files_only=True))
     sd, kinds = {}, set()
     with safe_open(str(f), "pt") as h:
         for k in h.keys():
@@ -191,7 +191,7 @@ def build(painter, model, loras, speed):
     wanted = [("a%d" % i, artist_loras.path_of(KIT, l["id"]), l.get("weight", artist_loras.WEIGHT), l["id"]) for i, l in enumerate(loras or [])]
     if painter == "qwen21":
         from diffusers import QwenImage21Pipeline
-        pipe = QwenImage21Pipeline.from_pretrained(str(Q21), torch_dtype=torch.bfloat16)
+        pipe = QwenImage21Pipeline.from_pretrained(str(Q21), torch_dtype=torch.bfloat16, local_files_only=True)
         said = load_adapters(pipe, wanted, modules_of(Q21 / "transformer")) if wanted else []
         import artist_job
         artist_job.set_schedule(pipe, speed)                 # HERESY 1319
@@ -200,13 +200,13 @@ def build(painter, model, loras, speed):
     if painter in GGUF:
         ckpt = Q2512 / "gguf" / GGUF[painter]
         tr = QwenImageTransformer2DModel.from_single_file(str(ckpt), quantization_config=GGUFQuantizationConfig(compute_dtype=torch.bfloat16),
-                                                          config=str(Q2512 / "transformer"), torch_dtype=torch.bfloat16)
+                                                          config=str(Q2512 / "transformer"), torch_dtype=torch.bfloat16, local_files_only=True)
         kind = "base"
     else:
         ckpt = checkpoint(model)
         tr, store = fp8_transformer(ckpt)
         kind = "fine"
-    pipe = QwenImagePipeline.from_pretrained(str(Q2512), transformer=tr, torch_dtype=torch.bfloat16)
+    pipe = QwenImagePipeline.from_pretrained(str(Q2512), transformer=tr, torch_dtype=torch.bfloat16, local_files_only=True)
     lw, steps = SPEED[kind]
     if speed.get("lightning") is not None:
         lw = float(speed["lightning"])
@@ -236,8 +236,7 @@ def flagged(img, state={}):
     if not (art_job.FILTER / "config.json").is_file():
         return None
     if "f" not in state:
-        from transformers import pipeline
-        state["f"] = pipeline("image-classification", model=str(art_job.FILTER), device="cpu")
+        state["f"] = art_job.content_filter()
     scores = {r["label"].lower(): r["score"] for r in state["f"](img.convert("RGB"))}
     return round(scores.get("nsfw", 0.0), 3)
 

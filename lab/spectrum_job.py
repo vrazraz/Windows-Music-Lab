@@ -14,6 +14,10 @@ float32 dB. About 10 MB for 7 minutes, against 80–120 MB of audio the page use
 
     spectrum_job.py AUDIO.wav OUT.spec
 """
+from pathlib import Path as _RuntimePath
+from platform_runtime import configure_runtime as _configure_runtime
+_configure_runtime(_RuntimePath(__file__).resolve().parent.parent)
+
 import json, struct, sys, wave
 import numpy as np
 
@@ -23,9 +27,9 @@ if not src.lower().endswith(".wav"):          # HERESY 1021: FLAC stems, read by
     data, sr = sf.read(src, dtype="float64", always_2d=True)
     x, sw, ch = data.mean(1), 0, 1
 else:
-    w = wave.open(src)
-    sr, ch, sw, n = w.getframerate(), w.getnchannels(), w.getsampwidth(), w.getnframes()
-    raw = w.readframes(n)
+    with wave.open(src) as w:
+        sr, ch, sw, n = w.getframerate(), w.getnchannels(), w.getsampwidth(), w.getnframes()
+        raw = w.readframes(n)
 if sw == 0:
     pass
 elif sw == 3:

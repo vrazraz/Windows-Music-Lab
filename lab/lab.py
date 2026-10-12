@@ -85,6 +85,7 @@ free memory, and leave VRAM when they end. The page asks again every two seconds
 import base64, collections, json, os, re, shutil, subprocess, sys, threading, time, urllib.error, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+import platform_runtime as runtime
 
 HERE = Path(__file__).resolve().parent
 KIT = HERE.parent
@@ -93,11 +94,34 @@ CACHE = HERE / "cache"
 WHISPER_DIR = KIT / "whisper" / "whisper-large-v3-ct2-float16"
 # HERESY 1021: everything inside the Kit (Viktor: «Ничего не привязываем к извне»). The lab's own
 # venv has torch, audio-separator, faster-whisper and numpy; cuDNN 9 and cuBLAS come with torch.
-LAB_PY = Path(os.environ.get("LAB_PY", HERE.parent / ".venv/bin/python"))   # HERESY 1080: the studio's one environment
+LAB_PY = Path(os.environ.get("LAB_PY", runtime.venv_python(KIT)))   # HERESY 1080: the studio's one environment
 WHISPER_PY = Path(os.environ.get("LAB_WHISPER_PY", LAB_PY))
-NV = Path(os.environ.get("LAB_NVIDIA_LIBS", HERE.parent / ".venv/lib/python3.12/site-packages/nvidia"))
+NV = Path(os.environ.get("LAB_NVIDIA_LIBS", runtime.site_packages(KIT) / "nvidia"))
 PORT = int(os.environ.get("LAB_PORT", "41870"))
 NEED_MB = 5000                     # large-v3 float16 with room for a 7-minute song (UniverSR in 20 s chunks: ~10 GB)
+
+
+_JOB_CONTEXT = threading.local()
+
+
+def native_run(*args, **kwargs):
+    command = args[0] if args else kwargs.get("args", [])
+    if isinstance(command, (list, tuple)) and command:
+        program = Path(command[0])
+        if program.name.lower() in ("python", "python.exe") and not program.is_file():
+            raise RuntimeError("the approved Python dependencies are not installed in this project's virtual environment; run the documented Windows dependency setup first")
+    script = Path(command[1]).name if isinstance(command, (list, tuple)) and len(command) > 1 else ""
+    env = kwargs.get("env") or os.environ
+    gpu_scripts = {"whisper_job.py", "stems_job.py", "upscale_job.py", "textend_job.py", "art_job.py"}
+    visible = str(env.get("CUDA_VISIBLE_DEVICES", ""))
+    if script in gpu_scripts and visible and env.get("WHISPER_DEVICE") != "cpu":
+        gpu = int(visible.split(",")[0])
+        job = getattr(_JOB_CONTEXT, "job", None)
+        with runtime.gpu_lease(gpu, job=job, waiting=act_say):
+            need = (job or {}).get("need_mb", {"whisper_job.py": 5000, "stems_job.py": 8000, "upscale_job.py": 11000, "textend_job.py": 4500}.get(script, 5000))
+            gpu_handoff(gpu, need, script)
+            return runtime.run_process(*args, root=KIT, **kwargs)
+    return runtime.run_process(*args, root=KIT, **kwargs)
 
 sys.path.insert(0, str(HERE))
 import gloss_core  # noqa: E402
@@ -142,8 +166,11 @@ class turn:
 
     def __enter__(self):
         heavy.acquire()
+        self.previous = getattr(_JOB_CONTEXT, "job", None)
+        _JOB_CONTEXT.job = self.job
         with jobs_lock:
             if self.job is not None and self.job.get("cancel"):
+                _JOB_CONTEXT.job = self.previous
                 heavy.release()
                 raise Cancelled(OFF_QUEUE)
             if self.job is not None:
@@ -151,6 +178,7 @@ class turn:
         return self
 
     def __exit__(self, *exc):
+        _JOB_CONTEXT.job = self.previous
         heavy.release()
         return False
 
@@ -203,6 +231,9 @@ def free_gpu(need=None, role="jobs", why="a lab job"):
     The cards given to `role` first (HERESY 1091: user/gpus.json), the most free first; then, for the lab's jobs, any
     card the guard passes; training stays on its own cards. None will do: refused aloud, card by card."""
     need = need or NEED_MB
+    job = getattr(_JOB_CONTEXT, "job", None)
+    if job is not None:
+        job["need_mb"] = need
     try:
         allowed = gpu_roles.load(KIT, training.gpus()).get(role) or []
         card, cards = gpu_guard.pick(allowed, fallback=(role == "jobs"), need_mb=need)
@@ -214,6 +245,13 @@ def free_gpu(need=None, role="jobs", why="a lab job"):
         raise RuntimeError(f"no card can take this now (it needs {need} MB): {gpu_guard.verdict(cards)}."
                            " Engine \u2192 GPUs says which card does what")
     return card["index"], card["free_mb"]
+
+
+def gpu_handoff(gpu, need, why="a lab GPU job"):
+    """Under an acquired lease: unload the idle engine, then recheck this card."""
+    if runtime.WINDOWS and os.environ.get("RUACH_GPU_MUTEX"):
+        engine_unload(why)
+    return gpu_guard.check(gpu, need_mb=need, root=KIT)
 
 
 ART_WAIT_S = 3 * 3600              # HERESY 1167: how long an artwork waits in the queue for a card
@@ -269,7 +307,9 @@ def lora_cache(save=None):
 def whisper_env():
     """HERESY 1141: the environment for a Whisper job: a card the guard gives, else the CPU (int8, slower: about the
     song's own length on 16 threads), said in the job's result. (env, device, why)"""
-    base = dict(os.environ, LD_LIBRARY_PATH=f"{NV}/cudnn/lib:{NV}/cublas/lib:" + os.environ.get("LD_LIBRARY_PATH", ""))
+    base = runtime.job_environment(KIT)
+    if not runtime.WINDOWS:
+        base["LD_LIBRARY_PATH"] = f"{NV}/cudnn/lib:{NV}/cublas/lib:" + base.get("LD_LIBRARY_PATH", "")
     try:
         gpu, _ = free_gpu()
         return dict(base, CUDA_VISIBLE_DEVICES=str(gpu), CUDA_DEVICE_ORDER="PCI_BUS_ID", WHISPER_DEVICE="cuda"), gpu, ""
@@ -351,21 +391,37 @@ def studio_restart():
         raise RuntimeError(f"the studio does not answer: {e}")
     if hw.get("busy"):
         raise ValueError("the studio is rendering now: restart it when the run is done")
+    if runtime.WINDOWS:
+        if os.environ.get("RUACH_FULL_SUPERVISED") != "1":
+            raise ValueError("the Windows engine is managed by its launcher: stop and restart that launcher to apply GPU changes; the card is saved")
+        state = Path(os.environ.get("RUACH_FULL_STATE_DIR", KIT / "windows/state/full")).resolve()
+        try:
+            state.relative_to(KIT.resolve())
+        except ValueError:
+            raise ValueError("the supervisor state directory must be inside this project")
+        if not state.is_dir():
+            raise ValueError("the owning Windows supervisor is not available")
+        marker = state / "restart.requested"
+        part = state / "restart.requested.part"
+        part.write_text(json.dumps({"instance": os.environ.get("RUACH_FULL_INSTANCE", ""), "at": time.time()}), encoding="utf-8")
+        os.replace(part, marker)
+        return {"status": "restarting", "managed": True}
     # HERESY 1259: only a studio that runs as its systemd unit is restarted from here. Under Pinokio or by hand (./start.sh) there is
     # no unit: «restarting» was a word for nothing, and the page then said the studio was back. The card is saved all the same.
-    if subprocess.run(["systemctl", "--user", "is-active", "--quiet", "ruach-studio"], timeout=10).returncode != 0:
+    if native_run(["systemctl", "--user", "is-active", "--quiet", "ruach-studio"], timeout=10).returncode != 0:
         raise ValueError("the studio does not run as a service here (Pinokio, or ./start.sh by hand): stop it and start it again "
                          "there to move it; the card is saved")
 
     def later():
         time.sleep(1)
-        subprocess.run(["systemctl", "--user", "restart", "ruach-studio"], timeout=120)
+        native_run(["systemctl", "--user", "restart", "ruach-studio"], timeout=120)
     threading.Thread(target=later, daemon=True).start()
     return {"status": "restarting"}
 
 
 def take_dir(name):
-    if not name or "/" in name or name.startswith("."):
+    runtime.safe_component(name)
+    if name.startswith("."):
         raise ValueError("bad take name")
     d = OUTPUTS / name
     if not (d / "request.json").is_file():
@@ -395,9 +451,9 @@ def gloss(name, force=False, cached_only=False, source="", job=None):
     CACHE.mkdir(exist_ok=True)
     src_audio, tag = source_of(name, source)
     cached = CACHE / f"{name}{tag}.gloss.json"
-    req = json.load(open(d / "request.json", encoding="utf-8"))
+    req = runtime.read_json(d / "request.json")
     if cached.is_file() and not force:
-        return json.load(open(cached, encoding="utf-8"))
+        return runtime.read_json(cached)
     if cached_only:
         raise FileNotFoundError(f"{name} has not been measured yet")
     audio = src_audio
@@ -408,16 +464,16 @@ def gloss(name, force=False, cached_only=False, source="", job=None):
         env, gpu, why = whisper_env()                    # HERESY 1141: a card, or the CPU when none can take it
         raw = CACHE / f"{name}{tag}.whisper.json"
         t0 = time.time()
-        p = subprocess.run([str(WHISPER_PY), str(HERE / "whisper_job.py"), str(audio), str(raw), lang, str(WHISPER_DIR)],
+        p = native_run([str(WHISPER_PY), str(HERE / "whisper_job.py"), str(audio), str(raw), lang, str(WHISPER_DIR)],
                            env=env, capture_output=True, text=True, timeout=1800)
         if p.returncode != 0:
             raise RuntimeError("Whisper failed: " + (p.stderr.strip().splitlines() or ["no output"])[-1])
-    w = json.load(open(raw, encoding="utf-8"))
+    w = runtime.read_json(raw)
     result = gloss_core.measure(w, req.get("lyrics", ""))
     result.update(name=name, source=source, language=lang, gpu=gpu, took=round(time.time() - t0, 1), device_note=why,
                   load_s=w.get("load_s"), listen_s=w.get("listen_s"), model="whisper-large-v3 (float16)",
                   at=time.strftime("%Y-%m-%d %H:%M"))
-    json.dump(result, open(cached, "w", encoding="utf-8"), ensure_ascii=False)
+    runtime.write_json(cached, result, ensure_ascii=False)
     return result
 
 
@@ -435,7 +491,7 @@ def gloss_async(name, force=False, source=""):
             jobs.pop(key)                           # report once, then allow a new try
             return dict(job, name=name)
         if cached.is_file() and not force:
-            return json.load(open(cached, encoding="utf-8"))
+            return runtime.read_json(cached)
         job = {"status": "queued", "started": time.time()}
         jobs[key] = job
 
@@ -456,7 +512,7 @@ def gloss_async(name, force=False, source=""):
 # lyrics re-aligns without hearing the take again.
 def timing_async(name, force=False, cached_only=False):
     d = take_dir(name)
-    lyrics = json.load(open(d / "request.json", encoding="utf-8")).get("lyrics", "")
+    lyrics = runtime.read_json(d / "request.json").get("lyrics", "")
     if not timing.rows_of(lyrics):
         raise ValueError("this take has no lyrics to time")
     audio, _ = source_of(name, "")
@@ -474,7 +530,7 @@ def timing_async(name, force=False, cached_only=False):
             jobs.pop(key)
             return dict(job, name=name)
         if out.is_file() and not force and out.stat().st_mtime >= newest:
-            return json.load(open(out, encoding="utf-8"))
+            return runtime.read_json(out)
         if cached_only:
             raise FileNotFoundError("not timed yet")
         job = {"status": "queued", "started": time.time(), "kind": "timing"}
@@ -489,16 +545,16 @@ def timing_async(name, force=False, cached_only=False):
                     env, gpu, why = whisper_env()        # HERESY 1141
                     job["gpu"] = gpu
                     part = Path(str(words) + ".part")
-                    p = subprocess.run([str(WHISPER_PY), str(HERE / "whisper_job.py"), str(audio), str(part), lang or "",
+                    p = native_run([str(WHISPER_PY), str(HERE / "whisper_job.py"), str(audio), str(part), lang or "",
                                         str(WHISPER_DIR), "words"], env=env, capture_output=True, text=True, timeout=1800)
                     if p.returncode != 0:
                         raise RuntimeError("Whisper failed: " + (p.stderr.strip().splitlines() or ["no output"])[-1][-300:])
                     os.replace(part, words)
             job["status"] = "running"
-            rows = timing.align(json.load(open(words, encoding="utf-8")), lyrics)
+            rows = timing.align(runtime.read_json(words), lyrics)
             res = {"name": name, "language": lang or "auto", "rows": rows,
                    "heard": round(sum(not r["guessed"] for r in rows) / len(rows), 3), "at": time.strftime("%Y-%m-%d %H:%M")}
-            json.dump(res, open(out, "w", encoding="utf-8"), ensure_ascii=False)
+            runtime.write_json(out, res, ensure_ascii=False)
             with jobs_lock:
                 jobs.pop(key, None)
         except Exception as e:
@@ -523,7 +579,7 @@ def spectrum_file(name, source=""):
         return out
     with cpu:
         tmp = CACHE / f"{name}{tag}.spec.part"
-        p = subprocess.run([str(NUMPY_PY), str(HERE / "spectrum_job.py"), str(audio), str(tmp)],
+        p = native_run([str(NUMPY_PY), str(HERE / "spectrum_job.py"), str(audio), str(tmp)],
                            capture_output=True, text=True, timeout=600)
         if p.returncode != 0:
             raise RuntimeError("spectrum failed: " + (p.stderr.strip().splitlines() or ["no output"])[-1])
@@ -567,7 +623,7 @@ def derived_list(name):
     out = []
     for m in sorted(d.glob("*/manifest.json")) if d.is_dir() else []:
         try:
-            out.append(json.load(open(m, encoding="utf-8")))
+            out.append(runtime.read_json(m))
         except ValueError:
             pass
     with jobs_lock:
@@ -588,7 +644,7 @@ def stems_async(name, mode, source=""):
         audio = source_of(name, source)[0]
         for man in sorted(d.glob(f"derived/stems-{mode}-*/manifest.json")):
             try:
-                made = json.load(open(man, encoding="utf-8"))
+                made = runtime.read_json(man)
             except (OSError, ValueError):
                 continue
             if made.get("source") == source:
@@ -603,7 +659,7 @@ def stems_async(name, mode, source=""):
             jobs.pop(key)
             return dict(job, name=name)
         if (target / "manifest.json").is_file():
-            return json.load(open(target / "manifest.json", encoding="utf-8"))
+            return runtime.read_json(target / "manifest.json")
         job = {"status": "queued", "started": time.time(), "kind": "stems", "mode": mode, "id": did}
         jobs[key] = job
 
@@ -616,7 +672,7 @@ def stems_async(name, mode, source=""):
                 env = dict(os.environ, CUDA_VISIBLE_DEVICES=str(gpu), CUDA_DEVICE_ORDER="PCI_BUS_ID")
                 tmp = d / "derived" / (did + ".part")
                 shutil.rmtree(tmp, ignore_errors=True)
-                p = subprocess.run([str(LAB_PY), str(HERE / "stems_job.py"), str(audio), str(tmp), mode],
+                p = native_run([str(LAB_PY), str(HERE / "stems_job.py"), str(audio), str(tmp), mode],
                                    env=env, capture_output=True, text=True, timeout=3600)
                 if p.returncode != 0:
                     raise RuntimeError("stems failed: " + (p.stderr.strip().splitlines() or ["no output"])[-1][-300:])
@@ -624,7 +680,7 @@ def stems_async(name, mode, source=""):
             manifest = {"id": did, "kind": "stems", "parent": name, "mode": mode, "source": source or "the take", "models": r["models"],
                         "files": [dict(s, path=f"derived/{did}/{s['file']}") for s in r["stems"]],
                         "took": r["took"], "gpu": gpu, "created": time.strftime("%Y-%m-%d %H:%M")}
-            json.dump(manifest, open(tmp / "manifest.json", "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+            runtime.write_json(tmp / "manifest.json", manifest, ensure_ascii=False, indent=2)
             shutil.rmtree(target, ignore_errors=True)
             tmp.rename(target)
             with jobs_lock:
@@ -661,8 +717,8 @@ def remaster_async(name, settings):
                 tmp = d / "derived" / (did + ".part")
                 tmp.mkdir(parents=True, exist_ok=True)
                 cfgfile = tmp / "settings.json"
-                json.dump(cfg, open(cfgfile, "w", encoding="utf-8"), ensure_ascii=False)
-                p = subprocess.run([str(LAB_PY), str(HERE / "remaster_job.py"), str(d), str(tmp), str(cfgfile)],
+                runtime.write_json(cfgfile, cfg, ensure_ascii=False)
+                p = native_run([str(LAB_PY), str(HERE / "remaster_job.py"), str(d), str(tmp), str(cfgfile)],
                                    capture_output=True, text=True, timeout=3600)
                 if p.returncode != 0:
                     raise RuntimeError("remaster failed: " + (p.stderr.strip().splitlines() or ["no output"])[-1][-300:])
@@ -672,7 +728,7 @@ def remaster_async(name, settings):
                         "models": ["Debunker v6.1"], "settings": cfg, "lufs_in": r["lufs_in"], "lufs_out": r["lufs_out"],
                         "files": [dict(f, path=f"derived/{did}/{f['file']}", seconds=secs) for f in r["files"] if f["format"] in ("wav", "flac")],
                         "took": r["took"], "created": time.strftime("%Y-%m-%d %H:%M")}
-            json.dump(manifest, open(tmp / "manifest.json", "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+            runtime.write_json(tmp / "manifest.json", manifest, ensure_ascii=False, indent=2)
             tmp.rename(d / "derived" / did)
             with jobs_lock:
                 jobs.pop(key, None)
@@ -690,7 +746,7 @@ def seconds_of(path):
     if not path or not Path(path).is_file():
         return None
     try:
-        p = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
+        p = native_run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
                            capture_output=True, text=True, timeout=30)
         return round(float(p.stdout.strip()), 2)
     except (ValueError, OSError, subprocess.SubprocessError):
@@ -713,7 +769,7 @@ def import_track(filename, title, body):
     d.mkdir(parents=True)
     original = d / ("original" + ext)
     original.write_bytes(body)
-    p = subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(original), "-ac", "2", "-ar", "48000",
+    p = native_run(["ffmpeg", "-v", "error", "-y", "-i", str(original), "-ac", "2", "-ar", "48000",
                         "-c:a", "pcm_s24le", str(d / "audio.wav")], capture_output=True, text=True, timeout=600)
     if p.returncode != 0:
         shutil.rmtree(d, ignore_errors=True)
@@ -721,12 +777,11 @@ def import_track(filename, title, body):
     import wave
     w = wave.open(str(d / "audio.wav"))
     secs = w.getnframes() / w.getframerate()
-    json.dump({"title": title, "created": int(time.time()), "seconds": secs, "format": "wav24", "favorite": False,
+    runtime.write_json(d / "meta.json", {"title": title, "created": int(time.time()), "seconds": secs, "format": "wav24", "favorite": False,
                "truncated": False, "render_seconds": 0, "song": 0, "variation": 0, "provided_score": False,
-               "model": "import"}, open(d / "meta.json", "w", encoding="utf-8"), ensure_ascii=False, indent=4)
-    json.dump({"title": title, "style": "imported: " + filename, "lyrics": "", "cot": "off",
-               "imported": {"file": filename, "bytes": len(body), "at": time.strftime("%Y-%m-%d %H:%M")}},
-              open(d / "request.json", "w", encoding="utf-8"), ensure_ascii=False)
+               "model": "import"}, ensure_ascii=False, indent=4)
+    runtime.write_json(d / "request.json", {"title": title, "style": "imported: " + filename, "lyrics": "", "cot": "off",
+               "imported": {"file": filename, "bytes": len(body), "at": time.strftime("%Y-%m-%d %H:%M")}}, ensure_ascii=False)
     return {"name": name, "title": title, "seconds": round(secs, 2)}
 
 
@@ -765,7 +820,7 @@ def settings_get(scope=""):
     p = scoped("settings", scope)
     if not p.is_file():
         return {"saved_at": 0, "keys": {}}
-    return json.load(open(p, encoding="utf-8"))
+    return runtime.read_json(p)
 
 
 def settings_put(body, scope=""):
@@ -802,7 +857,7 @@ def presets_get(scope=""):
     p = scoped("presets", scope)
     if not p.is_file():
         return {"styles": [], "setups": [], "textprofiles": [], "briefs": []}
-    d = json.load(open(p, encoding="utf-8"))
+    d = runtime.read_json(p)
     return {"styles": d.get("styles", []), "setups": d.get("setups", []), "textprofiles": d.get("textprofiles", []),
             "briefs": d.get("briefs", [])}            # HERESY 1167: the Writer's briefs, kept by name
 
@@ -846,9 +901,9 @@ def presets_put(body, scope=""):
 
 def set_lyrics(name, text):
     d = take_dir(name)
-    r = json.load(open(d / "request.json", encoding="utf-8"))
+    r = runtime.read_json(d / "request.json")
     r["lyrics"] = text
-    json.dump(r, open(d / "request.json", "w", encoding="utf-8"), ensure_ascii=False)
+    runtime.write_json(d / "request.json", r, ensure_ascii=False)
     for f in CACHE.glob(f"{name}*.gloss.json"):      # a measurement against the old lyrics no longer holds
         f.unlink()
     return {"name": name, "lines": len([l for l in text.splitlines() if l.strip()])}
@@ -882,7 +937,7 @@ def upscale_async(name, mode, source="", variants=2, keep=True, ceiling=None):
                 tmp.mkdir(parents=True, exist_ok=True)
                 env = dict(os.environ, CUDA_VISIBLE_DEVICES=str(gpu), CUDA_DEVICE_ORDER="PCI_BUS_ID", HF_HOME=str(HF_HOME))
                 seeds = ",".join(str(1000 + i) for i in range(max(1, min(int(variants), 4))))
-                p = subprocess.run([str(LAB_PY), str(HERE / "upscale_job.py"), str(audio), str(tmp), mode, seeds,
+                p = native_run([str(LAB_PY), str(HERE / "upscale_job.py"), str(audio), str(tmp), mode, seeds,
                                     "keep" if keep else "all"] + ([str(float(ceiling))] if ceiling is not None else []),
                                    env=env, capture_output=True, text=True, timeout=7200)
                 if p.returncode != 0:
@@ -893,7 +948,7 @@ def upscale_async(name, mode, source="", variants=2, keep=True, ceiling=None):
                         "keep_low": r["keep_low"], "gpu": gpu, **({"ceiling_db": r["ceiling_db"]} if r.get("ceiling_db") is not None else {}),
                         "files": [dict(f, path=f"derived/{did}/{f['file']}") for f in r["files"]],
                         "took": r["took"], "created": time.strftime("%Y-%m-%d %H:%M")}
-            json.dump(manifest, open(tmp / "manifest.json", "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+            runtime.write_json(tmp / "manifest.json", manifest, ensure_ascii=False, indent=2)
             tmp.rename(d / "derived" / did)
             with jobs_lock:
                 jobs.pop(key, None)
@@ -925,7 +980,7 @@ def debuzz_async(name, source="", strength=0.8, period=1920, rate=48000):
                 job["status"] = "running"
                 tmp = d / "derived" / (did + ".part")
                 tmp.mkdir(parents=True, exist_ok=True)
-                p = subprocess.run([str(LAB_PY), str(HERE / "debuzz.py"), str(audio), str(tmp / "debuzz.flac"), str(strength),
+                p = native_run([str(LAB_PY), str(HERE / "debuzz.py"), str(audio), str(tmp / "debuzz.flac"), str(strength),
                                     "2000", "50", "3", str(period), str(rate)],
                                    capture_output=True, text=True, timeout=3600)
                 if p.returncode != 0:
@@ -936,7 +991,7 @@ def debuzz_async(name, source="", strength=0.8, period=1920, rate=48000):
                         "files": [{"name": f"debuzz {round(strength * 100)} %", "file": "debuzz.flac",
                                    "path": f"derived/{did}/debuzz.flac", "seconds": r["seconds"]}],
                         "took": r["took"], "created": time.strftime("%Y-%m-%d %H:%M")}
-            json.dump(manifest, open(tmp / "manifest.json", "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+            runtime.write_json(tmp / "manifest.json", manifest, ensure_ascii=False, indent=2)
             tmp.rename(d / "derived" / did)
             with jobs_lock:
                 jobs.pop(key, None)
@@ -961,7 +1016,7 @@ def textend_async(name, force=False, cached_only=False):
             jobs.pop(key)
             return dict(job, name=name)
         if out.is_file() and not force:
-            return json.load(open(out, encoding="utf-8"))
+            return runtime.read_json(out)
         if cached_only:
             raise FileNotFoundError("not measured yet")
         job = {"status": "queued", "started": time.time(), "kind": "textend"}
@@ -977,13 +1032,13 @@ def textend_async(name, force=False, cached_only=False):
                     env, device = dict(os.environ, CUDA_VISIBLE_DEVICES=str(gpu), CUDA_DEVICE_ORDER="PCI_BUS_ID"), "cuda"
                 except RuntimeError:
                     env, device = dict(os.environ, CUDA_VISIBLE_DEVICES=""), "cpu"
-                p = subprocess.run([str(LAB_PY), str(HERE / "textend_job.py"), str(d), device],
+                p = native_run([str(LAB_PY), str(HERE / "textend_job.py"), str(d), device],
                                    env=env, capture_output=True, text=True, timeout=3600)
                 if p.returncode != 0:
                     raise RuntimeError("textend failed: " + (p.stderr.strip().splitlines() or ["no output"])[-1][-300:])
                 r = json.loads(p.stdout.strip().splitlines()[-1])
                 r["device"] = device
-                json.dump(r, open(out, "w", encoding="utf-8"))
+                runtime.write_json(out, r)
             with jobs_lock:
                 jobs.pop(key, None)
         except Exception as e:
@@ -1008,7 +1063,7 @@ def inspect_async(name, source="", force=False, cached_only=False):
             jobs.pop(key)
             return dict(job, name=name)
         if out.is_file() and not force and out.stat().st_mtime >= audio.stat().st_mtime:
-            return json.load(open(out, encoding="utf-8"))
+            return runtime.read_json(out)
         if cached_only:
             raise FileNotFoundError("not inspected yet")
         job = {"status": "queued", "started": time.time(), "kind": "inspect"}
@@ -1018,7 +1073,7 @@ def inspect_async(name, source="", force=False, cached_only=False):
         try:
             with cpu:
                 job["status"] = "running"
-                p = subprocess.run([str(LAB_PY), str(HERE / "inspect_job.py"), str(audio), str(out) + ".part"],
+                p = native_run([str(LAB_PY), str(HERE / "inspect_job.py"), str(audio), str(out) + ".part"],
                                    capture_output=True, text=True, timeout=1800)
                 if p.returncode != 0:
                     raise RuntimeError("inspect failed: " + (p.stderr.strip().splitlines() or ["no output"])[-1][-300:])
@@ -1061,7 +1116,7 @@ def _follow(r, key):
 
 
 def _first_file(d, did, fmt=("wav", "flac")):
-    man = json.load(open(d / "derived" / did / "manifest.json", encoding="utf-8"))
+    man = runtime.read_json(d / "derived" / did / "manifest.json")
     files = man.get("files") or []
     pick = next((f for f in files if str(f.get("path", "")).rsplit(".", 1)[-1] in fmt), files[0] if files else None)
     if not pick:
@@ -1162,7 +1217,7 @@ ART_NEED = {"krea2-q4": 15000, "krea2-q8": 21000, "sdxl": ART_NEED_MB}   # with 
 # HERESY 1297: measured again on GPU2 10.10.2026, the prompter (Qwen3-4B) before the painter, at 1024 px: Krea 2 Muse Q4 12.6 GB
 # (42 s), SDXL 14.2 GB (17 s); Q8 17.4 GB (05.10). A margin of about half a gigabyte: a 16 GB card (15 GB left by a desktop) takes Q4
 ART_NEED = {"krea2-q4": 13500, "krea2-q8": 18500, "sdxl": 15000}
-ART_PY = Path(os.environ.get("LAB_ART_PY", HERE.parent / ".venv-art/bin/python"))
+ART_PY = Path(os.environ.get("LAB_ART_PY", runtime.venv_python(KIT, artist=True)))
 MUSE_FILES = {"krea2-q4": "museByStableYogi_v35Q4Extended.gguf", "krea2-q8": "museByStableYogi_v35Q8Extended.gguf"}
 
 
@@ -1196,7 +1251,7 @@ def art_painter(asked=None):
     p = art_here(asked)
     if not p:
         try:
-            p = art_here(json.load(open(KIT / "user/settings.json", encoding="utf-8")).get("keys", {}).get("yue2.artPainter"))
+            p = art_here(runtime.read_json(KIT / "user/settings.json").get("keys", {}).get("yue2.artPainter"))
         except (OSError, ValueError, AttributeError):
             p = ""
     if p:
@@ -1220,7 +1275,7 @@ def art_info(name):
         return None
     meta = {}
     try:
-        meta = json.load(open(d / "artwork.json", encoding="utf-8"))
+        meta = runtime.read_json(d / "artwork.json")
     except (OSError, ValueError):
         pass
     return dict(meta, name=name, url="/lab/art?name=" + urllib.parse.quote(name) + "&v=" + str(int(f.stat().st_mtime)))
@@ -1259,11 +1314,11 @@ def art_copy(src, dst, why):
         return False
     shutil.copy2(src / "artwork.jpg", dst / "artwork.jpg")
     try:
-        meta = json.load(open(src / "artwork.json", encoding="utf-8"))
+        meta = runtime.read_json(src / "artwork.json")
     except (OSError, ValueError):
         meta = {}
     meta.update(copied_from=src.name, why=why)
-    json.dump(meta, open(dst / "artwork.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    runtime.write_json(dst / "artwork.json", meta, ensure_ascii=False, indent=1)
     return True
 
 
@@ -1271,7 +1326,7 @@ def art_pair(name):
     """HERESY 1162 (Viktor: «Для A/B семплов зачем нам мучиться с двумя картинками?»): the other letter's takes of an A/B
     pair (a title ending -a or -b), whichever of them there are."""
     try:
-        title = json.load(open(OUTPUTS / name / "meta.json", encoding="utf-8")).get("title") or ""
+        title = runtime.read_json(OUTPUTS / name / "meta.json").get("title") or ""
     except (OSError, ValueError):
         return []
     m = re.match(r"^(.*)-([ab])$", title)
@@ -1281,7 +1336,7 @@ def art_pair(name):
     out = []
     for f in OUTPUTS.glob("*/meta.json"):
         try:
-            if json.load(open(f, encoding="utf-8")).get("title") == other:
+            if runtime.read_json(f).get("title") == other:
                 out.append(f.parent)
         except (OSError, ValueError):
             pass
@@ -1303,7 +1358,7 @@ def arts():
             continue
         if ART_SEEN.get(name, (None,))[0] != t:
             try:
-                m = json.load(open(meta, encoding="utf-8"))
+                m = runtime.read_json(meta)
                 ART_SEEN[name] = (t, m.get("seen"), art_credit(m))
             except (OSError, ValueError):
                 ART_SEEN[name] = (t, None, None)
@@ -1384,7 +1439,7 @@ def art_async(name, again=False, seed=None, painter=None):
                                ART_MODEL=painter.partition(":")[2])   # HERESY 1338
                     tmp = d / "artwork.part.jpg"
                     py = ART_PY if painter != "sdxl" else LAB_PY
-                    p = subprocess.run([str(py), str(HERE / "art_job.py"), str(d), str(tmp), str(seed if seed is not None else "")],
+                    p = native_run([str(py), str(HERE / "art_job.py"), str(d), str(tmp), str(seed if seed is not None else "")],
                                        env=env, capture_output=True, text=True, timeout=1200)
                     if p.returncode != 0:
                         raise RuntimeError("no artwork: " + (p.stderr.strip().splitlines() or ["no output"])[-1][-300:])
@@ -1398,7 +1453,7 @@ def art_async(name, again=False, seed=None, painter=None):
                 (d / "artwork.jpg").replace(keep / f"{stamp}.jpg")
                 if (d / "artwork.json").is_file():
                     (d / "artwork.json").replace(keep / f"{stamp}.json")
-            json.dump(r, open(d / "artwork.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+            runtime.write_json(d / "artwork.json", r, ensure_ascii=False, indent=1)
             tmp.replace(d / "artwork.jpg")
             for sib in art_pair(name):                 # HERESY 1162: the pair's other letter gets it too, when it has none
                 art_copy(d, sib, "the other letter of its A/B pair")
@@ -1568,7 +1623,7 @@ def _regen_pending(add=None, done=None):
     with REGEN_LOCK:
         p = config_dir() / "regen-pending.json"
         try:
-            rows = json.load(open(p, encoding="utf-8"))
+            rows = runtime.read_json(p)
         except (OSError, ValueError):
             rows = []
         if add or done is not None:
@@ -1577,7 +1632,7 @@ def _regen_pending(add=None, done=None):
             if done is not None:
                 rows = [r for r in rows if str(r.get("job")) != str(done)]
             tmp = p.with_name(p.name + ".part")
-            json.dump(rows, open(tmp, "w", encoding="utf-8"), ensure_ascii=False)
+            runtime.write_json(tmp, rows, ensure_ascii=False)
             os.replace(tmp, p)
         return rows
 
@@ -1647,7 +1702,7 @@ def _regen_watch(job, old):
                     collection.collection_post(cfg, OUTPUTS, {"op": "rate", "names": new, "value": 1})
                 collection.collection_post(cfg, OUTPUTS, {"op": "regen-of", "names": new, "from": old})
                 try:
-                    if json.load(open(OUTPUTS / old / "meta.json", encoding="utf-8")).get("favorite"):
+                    if runtime.read_json(OUTPUTS / old / "meta.json").get("favorite"):
                         for n in new:
                             api._engine("/library/update?name=" + urllib.parse.quote(n), {"favorite": True})
                 except (OSError, ValueError):
@@ -1655,7 +1710,7 @@ def _regen_watch(job, old):
                 # HERESY 1166 (Viktor: «смело переименовывай все треки в законченных 💎 воркспейсах»): its title too: the new
                 # one comes with its request's, the title it was first made with, and would undo a rename
                 try:
-                    old_title = json.load(open(OUTPUTS / old / "meta.json", encoding="utf-8")).get("title")
+                    old_title = runtime.read_json(OUTPUTS / old / "meta.json").get("title")
                     for n in new if old_title else []:
                         api._engine("/library/update?name=" + urllib.parse.quote(n), {"title": old_title})
                 except (OSError, ValueError):
@@ -1688,12 +1743,12 @@ def regen(names, same_seeds=False):
             continue
         try:
             d = take_dir(name)
-            req = json.load(open(d / "request.json", encoding="utf-8"))
+            req = runtime.read_json(d / "request.json")
         except (OSError, ValueError, FileNotFoundError):
             out.append({"name": name, "error": "no request kept: an imported take cannot be made again"})
             continue
         try:
-            meta = json.load(open(d / "meta.json", encoding="utf-8"))
+            meta = runtime.read_json(d / "meta.json")
         except (OSError, ValueError):
             meta = {}
         for k in ("semantic_tokens", "semantic_keep", "parent") + (() if same_seeds else ("lm_seed", "seed")):
@@ -1724,6 +1779,7 @@ AUDIO_TYPES = {".flac": "audio/flac", ".wav": "audio/wav", ".mp3": "audio/mpeg"}
 # HERESY 1255: the Artist rooms runs reach the labs queue, cards, activity and takes through these
 artist.setup(kit=KIT, jobs=jobs, lock=jobs_lock, wait_card=wait_card, turn=turn, free_gpu=free_gpu, say=act_say,
              take_dir=take_dir, pair=art_pair, copy=art_copy, painter=art_painter, py=ART_PY, refusal=art_refusal,
+             gpu_handoff=gpu_handoff,
              outputs=OUTPUTS, frozen=lambda: collection.frozen_takes(collection.load(config_dir())))   # HERESY 1337: the art's trash
 
 
@@ -1738,7 +1794,41 @@ places.setup(KIT, busy=lab_busy, settings_lock=SETTINGS_LOCK, settings_file=conf
              studio_port=os.environ.get("YUE2CPP_PORT", "41867"), say=lambda s: print(s, file=sys.stderr, flush=True))
 
 
+class LocalHTTPServer(ThreadingHTTPServer):
+    """Bind exclusively to loopback, including an explicitly selected IPv6 loopback."""
+    def __init__(self, address, handler):
+        import socket
+        runtime.loopback_host(address[0])
+        self.address_family = socket.AF_INET6 if ":" in address[0] else socket.AF_INET
+        super().__init__(address, handler)
+
+
 class Handler(BaseHTTPRequestHandler):
+    def _local_request(self):
+        ports = {self.server.server_port, int(os.environ.get("YUE2CPP_PORT", "41867"))}
+        if runtime.local_request_allowed(self.headers, self.client_address[0], ports):
+            return True
+        self.send(403, {"error": "the lab accepts this machine and its local studio origin only"})
+        return False
+
+    def _cors(self):
+        origin = self.headers.get("Origin", "")
+        if origin and runtime.local_request_allowed(self.headers, self.client_address[0],
+                {self.server.server_port, int(os.environ.get("YUE2CPP_PORT", "41867"))}):
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+        self.send_header("X-Content-Type-Options", "nosniff")
+
+    def do_OPTIONS(self):
+        if not self._local_request():
+            return
+        self.send_response(204)
+        self._cors()
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def send_file(self, path, ctype="application/octet-stream", download=None, cache=None):
         size = path.stat().st_size
         rng = self.headers.get("Range", "")
@@ -1754,11 +1844,13 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Accept-Ranges", "bytes")
         if rng:
             self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self._cors()
         if cache:                                          # HERESY 1274: a file that never changes under its name (the fonts)
             self.send_header("Cache-Control", cache)
         if download:                                       # HERESY 1090: saved under this name
-            self.send_header("Content-Disposition", 'attachment; filename="' + download.replace('"', "") + '"')
+            filename = str(download).replace("\r", "").replace("\n", "")
+            ascii_name = filename.encode("ascii", "replace").decode().replace('"', "_").replace("\\", "_")
+            self.send_header("Content-Disposition", 'attachment; filename="' + ascii_name + '"; filename*=UTF-8\'\'' + urllib.parse.quote(filename, safe=""))
         self.send_header("Content-Length", str(length))
         self.end_headers()
         with open(path, "rb") as f:
@@ -1775,7 +1867,7 @@ class Handler(BaseHTTPRequestHandler):
         data = json.dumps(body, ensure_ascii=False).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self._cors()
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
@@ -1783,6 +1875,7 @@ class Handler(BaseHTTPRequestHandler):
     # HERESY 1116: the studio's API (lab/api.py), reached through the engine's /api/…
     def api(self, method, url, q, body):
         ctx = api_ctx()
+        ctx["remote_addr"] = self.client_address[0]
         try:
             code, out = api.handle(method, url.path, q, body, self.headers, ctx)
         except api.Redirect as r:
@@ -1800,6 +1893,8 @@ class Handler(BaseHTTPRequestHandler):
         return self.send(code, out)
 
     def do_GET(self):
+        if not self._local_request():
+            return
         url = urllib.parse.urlparse(self.path)
         q = {k: v[0] for k, v in urllib.parse.parse_qs(url.query).items()}
         if url.path.startswith("/api/"):
@@ -1820,7 +1915,10 @@ class Handler(BaseHTTPRequestHandler):
                     active = {k: v["status"] for k, v in jobs.items()}
                 if weights.running():                       # HERESY 1289: a download under way is a job too (a restart cuts it)
                     active["weights"] = "running"
-                return self.send(200, {"ok": True, "busy": heavy.locked(), "jobs": active, "whisper": WHISPER_DIR.is_dir()})
+                return self.send(200, {"ok": True, "busy": heavy.locked(), "jobs": active, "whisper": WHISPER_DIR.is_dir(),
+                                       "local_only": runtime.local_only(),
+                                       "capabilities": {"lab_environment": LAB_PY.is_file(), "artist_environment": ART_PY.is_file(),
+                                                        "whisper_model": WHISPER_DIR.is_dir()}})
             if url.path == "/gloss":
                 if q.get("cached") == "1":
                     return self.send(200, gloss(q.get("name", ""), cached_only=True, source=q.get("source", "")))
@@ -1835,7 +1933,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(404, {"error": "no score from the sound yet"})
                 meta = {}
                 try:
-                    meta = json.load(open(d / "score-from-sound.json", encoding="utf-8"))
+                    meta = runtime.read_json(d / "score-from-sound.json")
                 except (OSError, ValueError):
                     pass
                 return self.send(200, dict(meta, abc=f.read_text(encoding="utf-8")))
@@ -1927,7 +2025,7 @@ class Handler(BaseHTTPRequestHandler):
                 r = timing_async(q.get("name", ""), q.get("force") == "1", q.get("cached") == "1")
                 fmt = q.get("fmt", "json")
                 if fmt in ("lrc", "srt") and "rows" in r:
-                    title = json.load(open(take_dir(q["name"]) / "meta.json", encoding="utf-8")).get("title", "")
+                    title = runtime.read_json(take_dir(q["name"]) / "meta.json").get("title", "")
                     text = timing.lrc(r["rows"], title) if fmt == "lrc" else timing.srt(r["rows"])
                     data = text.encode("utf-8")
                     self.send_response(200)
@@ -1985,6 +2083,7 @@ class Handler(BaseHTTPRequestHandler):
             if url.path == "/trash":
                 return self.send(200, collection.trash_list(KIT))
             if url.path == "/collection/diamonds":       # HERESY 1166: the 💎 workspaces on Hugging Face
+                runtime.require_network("published cloud workspace listing")
                 return self.send(200, diamond.listing(KIT, OUTPUTS, config_dir(), refresh=q.get("refresh") == "1"))
             if url.path == "/update":                     # HERESY 1169: this version, the last look at GitHub's releases
                 return self.send(200, updates.status(KIT, config_dir()))
@@ -2018,18 +2117,28 @@ class Handler(BaseHTTPRequestHandler):
             self.send(500, {"error": str(e)})
 
     def do_POST(self):
+        if not self._local_request():
+            return
         url = urllib.parse.urlparse(self.path)
         q = {k: v[0] for k, v in urllib.parse.parse_qs(url.query).items()}
         if url.path.startswith("/api/"):
-            size = int(self.headers.get("Content-Length") or 0)
-            return self.api("POST", url, q, self.rfile.read(size) if 0 < size <= 64 * 1024 * 1024 else None)
+            try:
+                size = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                return self.send(400, {"error": "invalid Content-Length"})
+            if size <= 0 or size > 64 * 1024 * 1024:
+                return self.send(413, {"error": "send a JSON body up to 64 MB"})
+            return self.api("POST", url, q, self.rfile.read(size))
         try:
+            if url.path in ("/weights/fetch", "/artist/lora-civitai",
+                             "/train/starter", "/collection/diamonds"):
+                runtime.require_network("this external fetch/update route")
             size = int(self.headers.get("Content-Length") or 0)
             if size <= 0 or size > 1024 ** 3:
                 raise ValueError("send the file as the body, up to 1 GB")
             body = self.rfile.read(size)
             if url.path == "/weights/check":                # HERESY 1289
-                return self.send(202, weights.check(KIT))
+                return self.send(200 if runtime.WINDOWS or runtime.local_only() else 202, weights.check(KIT))
             if url.path == "/weights/fetch":                # HERESY 1289: on the user's word; a test page fetches nothing
                 return self.send(202, weights.fetch(KIT, json.loads(body.decode("utf-8")), q.get("scope", "")))
             if url.path in ("/places/move", "/places/relink"):   # HERESY 1261
@@ -2100,7 +2209,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("no score in the body")
                 (d / "score-from-sound.abc").write_text(abc, encoding="utf-8")
                 meta = {"by": "the transcriber (SheetSage2)", "made": time.strftime("%Y-%m-%d %H:%M")}
-                json.dump(meta, open(d / "score-from-sound.json", "w", encoding="utf-8"), ensure_ascii=False)
+                runtime.write_json(d / "score-from-sound.json", meta, ensure_ascii=False)
                 return self.send(200, meta)
             if url.path == "/gpus":                          # HERESY 1091
                 saved = gpu_roles.save(KIT, json.loads(body.decode("utf-8")), training.gpus())
@@ -2208,10 +2317,12 @@ def prune_loop():
 
 
 if __name__ == "__main__":
+    runtime.configure_runtime(KIT)
+    host = runtime.loopback_host(os.environ.get("LAB_HOST", "127.0.0.1"))
     threading.Thread(target=prune_loop, daemon=True).start()
     threading.Thread(target=act_watch, daemon=True).start()     # HERESY 1157
     places.boot()                    # HERESY 1261: a folder linked back from the record, a missing one made, a dangling one said
-    print(f"[lab] heresy-lab on :{PORT} · outputs {OUTPUTS} · whisper {WHISPER_DIR}", file=sys.stderr, flush=True)
+    print(f"[lab] Windows Music Lab on :{PORT} · outputs {OUTPUTS} · whisper {WHISPER_DIR}", file=sys.stderr, flush=True)
     training.resume(KIT)            # HERESY 1072: runs still going in their own units are watched again
     for r in _regen_pending():           # HERESY 1160: regenerations still owed their swap
         _regen_watch(r.get("job"), r.get("old"))
@@ -2219,4 +2330,4 @@ if __name__ == "__main__":
     if owed:
         print(f"[lab] {owed} API job(s) still to file into their workspaces: watched again", file=sys.stderr, flush=True)
     # HERESY 1114: this machine only; the page reaches the lab through the engine (/lab/), which keeps out the world
-    ThreadingHTTPServer((os.environ.get("LAB_HOST", "127.0.0.1"), PORT), Handler).serve_forever()
+    LocalHTTPServer((host, PORT), Handler).serve_forever()

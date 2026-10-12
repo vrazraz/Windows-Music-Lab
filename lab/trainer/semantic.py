@@ -48,7 +48,7 @@ def load_head_state_dict(head_path: str) -> dict:
     if str(head_path).endswith(".safetensors"):
         from safetensors.torch import load_file
         return load_file(head_path, device="cpu")
-    return torch.load(head_path, map_location="cpu", weights_only=False)["model"]
+    return torch.load(head_path, map_location="cpu", weights_only=True)["model"]
 
 
 class SemanticTokenizer(nn.Module):
@@ -57,8 +57,8 @@ class SemanticTokenizer(nn.Module):
     def __init__(self, head_path: str, mert_path: str):
         super().__init__()
         from transformers import AutoFeatureExtractor, AutoModel
-        self.processor = AutoFeatureExtractor.from_pretrained(mert_path, trust_remote_code=True)
-        self.mert = AutoModel.from_pretrained(mert_path, trust_remote_code=True).eval()
+        self.processor = AutoFeatureExtractor.from_pretrained(mert_path, trust_remote_code=True, local_files_only=True)
+        self.mert = AutoModel.from_pretrained(mert_path, trust_remote_code=True, local_files_only=True).eval()
         self.mert.requires_grad_(False)
         _rebuild_rotary(self.mert)
         self.head = TokenizerHead()

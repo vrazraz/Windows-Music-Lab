@@ -15,6 +15,8 @@ import json
 import os
 import subprocess
 from pathlib import Path
+import urllib.request
+import platform_runtime as runtime
 
 
 def path(kit):
@@ -35,7 +37,7 @@ def defaults(cards):
 def load(kit, cards):
     roles = defaults(cards)
     try:
-        saved = json.load(open(path(kit), encoding="utf-8"))
+        saved = runtime.read_json(path(kit))
     except (OSError, ValueError):
         saved = {}
     ids = indices(cards)
@@ -90,6 +92,20 @@ def studio_now():
     """The card the running studio computes on, or None when it is not running: GGML_BACKEND=CUDAn names it
     (HERESY 1109), an older start's CUDA_VISIBLE_DEVICES did; neither means the first card, the engine's own choice.
     The saved choice may wait for a restart."""
+    if runtime.WINDOWS:
+        try:
+            port = int(os.environ.get("YUE2CPP_PORT", "41867"))
+            req = urllib.request.Request(f"http://127.0.0.1:{port}/hardware")
+            with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(req, timeout=5) as response:
+                hardware = json.load(response)
+            backend = str(hardware.get("backend") or os.environ.get("GGML_BACKEND") or "")
+            if backend.startswith("CUDA") and backend[4:].isdigit():
+                return int(backend[4:])
+            # The owning launcher passes its selected physical card explicitly.
+            value = os.environ.get("RUACH_FULL_GPU")
+            return int(value) if value is not None and value.isdigit() else None
+        except (OSError, ValueError):
+            return None
     try:
         pid = subprocess.run(["systemctl", "--user", "show", "-p", "MainPID", "--value", "ruach-studio"],
                              capture_output=True, text=True, timeout=10).stdout.strip()

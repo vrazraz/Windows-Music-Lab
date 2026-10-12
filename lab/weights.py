@@ -12,6 +12,9 @@ download cut short going on from where it stopped, a second try after half a min
 A test page (?scope=…) checks but fetches nothing: the lab refuses. New LoRAs reach the engine at once; new backbones,
 decoders and sliders at its next start (it reads them when it starts), which the card says."""
 import json
+import collections
+import shutil
+import platform_runtime as runtime
 import os
 import re
 import subprocess
@@ -98,8 +101,19 @@ LOCK = threading.Lock()
 _BIG = []
 
 
+def _local_management():
+    return runtime.WINDOWS or runtime.local_only()
+
+
+def _reject_fetch():
+    if _local_management():
+        raise ValueError("model downloads are disabled in Windows/local-only mode; use reviewed pinned manifests and separately approved operator installation commands")
+
+
 def _biggest_card_mb():
     """The biggest card's memory, as fetch-heresy.sh --artwork judges it (0 without nvidia-smi); asked once."""
+    if _local_management():
+        return 0                           # local status never starts a hardware subprocess
     if not _BIG:
         try:
             out = subprocess.run(["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
@@ -120,7 +134,7 @@ def _here(kit, files):
                 shards = set(json.loads(f.read_text(encoding="utf-8")).get("weight_map", {}).values())
                 if not shards or any(not (f.parent / s).is_file() or (f.parent / s).stat().st_size == 0 for s in shards):
                     return False
-        except (OSError, ValueError):
+        except (OSError, ValueError, TypeError, AttributeError):
             return False
     return True
 
@@ -128,6 +142,8 @@ def _here(kit, files):
 def _extras(kit):
     out = []
     for e in EXTRAS:
+        if e is None and _local_management():
+            e = dict(ARTWORK_SMALL, variants=ARTWORK_SMALL["variants"] + ARTWORK_BIG["variants"])
         e = e or (ARTWORK_BIG if _biggest_card_mb() >= 16000 else ARTWORK_SMALL)
         out.append(dict({k: v for k, v in e.items() if k != "variants"},
                         variants=[dict({k: v for k, v in x.items() if k != "files"}, here=_here(kit, x["files"])) for x in e["variants"]]))
@@ -169,8 +185,7 @@ def _last_run(kit):
 
 def _free(kit):
     try:
-        st = os.statvfs(kit)
-        return st.f_bavail * st.f_frsize
+        return shutil.disk_usage(kit).free
     except OSError:
         return None
 
@@ -188,6 +203,9 @@ def _job_view(kit):
 
 
 def listing(kit):
+    kit = Path(kit)
+    if _local_management():
+        return _local_listing(kit)
     script = kit / "heresy" / "fetch-heresy.sh"
     return {"script": script.is_file(), "last": _last_run(kit), "extras": _extras(kit), "parts": PARTS,
             "job": _job_view(kit), "now": int(time.time())}
@@ -250,6 +268,7 @@ def _which(body):
 
 
 def _start(kit, args, what, kind, then_check, which=None, expect=None):
+    _reject_fetch()
     with LOCK:
         if JOB.get("status") == "running":
             raise ValueError(f"a run is under way ({JOB.get('what')}): one at a time")
@@ -262,12 +281,15 @@ def _start(kit, args, what, kind, then_check, which=None, expect=None):
 
 
 def check(kit):
+    if _local_management():
+        return _local_listing(Path(kit))
     if not (kit / "heresy" / "fetch-heresy.sh").is_file():
         raise FileNotFoundError("no heresy/fetch-heresy.sh in this tree")
     return _start(kit, ["--check"], "what is here", "check", False)
 
 
 def fetch(kit, body, scope=""):
+    _reject_fetch()
     if scope:
         raise ValueError("a test page fetches nothing: open the studio without ?scope= to fetch")
     if not (kit / "heresy" / "fetch-heresy.sh").is_file():
@@ -281,6 +303,7 @@ def fetch(kit, body, scope=""):
 
 def _say(kit, args):
     """One run of fetch-heresy.sh into JOB["lines"]; its exit status (0: nothing failed)."""
+    _reject_fetch()
     env = dict(os.environ, NO_COLOR="1", HF_HUB_DISABLE_TELEMETRY="1")
     p = subprocess.Popen(["bash", str(kit / "heresy" / "fetch-heresy.sh")] + args, cwd=str(kit), env=env, stdin=subprocess.DEVNULL,
                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
@@ -299,6 +322,7 @@ def _say(kit, args):
 
 
 def _run(kit, args, then_check):
+    _reject_fetch()
     try:
         rc = _say(kit, args)
         with LOCK:
@@ -323,3 +347,68 @@ def _run(kit, args, then_check):
     finally:
         with LOCK:
             JOB["ended"] = time.time()
+
+
+def _manifest_path(root, relative):
+    relative = str(relative)
+    parts = relative.replace("\\", "/").split("/")
+    if not parts:
+        raise ValueError("empty model path")
+    for part in parts:
+        runtime.safe_component(part)
+    path = (Path(root) / Path(*parts)).resolve()
+    path.relative_to(Path(root).resolve())
+    return path
+
+
+def _local_listing(kit):
+    """File-only inventory. Presence/size is reported; SHA validation is not invented."""
+    groups = collections.OrderedDict()
+    counts = {k:0 for k in ("here", "unknown", "differs", "fetched", "missing", "failed")}
+    metadata_errors = []
+    sources = []
+
+    def add(part, relative, row, base=kit):
+        group = groups.setdefault(part, {"part":part,"label":part,"size":"","rows":[]})
+        try:
+            path = _manifest_path(base, relative)
+            expected = int(row.get("size") or 0)
+            actual = path.stat().st_size if path.is_file() else None
+            state = "missing" if actual is None else "unknown" if expected <= 0 else "here" if actual == expected else "differs"
+            verdict = {"state":state, "text":str(relative), "bytes":actual, "expected_bytes":expected,
+                       "expected_sha256":str(row.get("sha256") or ""),
+                       "verification":"size_only" if actual is not None else "not_checked",
+                       "repository":row.get("repo") or row.get("repository"), "revision":row.get("revision"), "license":row.get("license")}
+        except (OSError, ValueError, TypeError):
+            state, verdict = "unknown", {"state":"unknown", "text":"invalid or unreadable manifest entry", "verification":"not_checked"}
+        counts[state] += 1
+        group["rows"].append(verdict)
+
+    for filename in ("downloads.json", "full-audio-models.json", "full-art-models.json"):
+        path = kit / "windows" / filename
+        if not path.is_file():
+            continue
+        try:
+            document = runtime.read_json(path)
+            sources.append("windows/" + filename)
+            for model in document.get("models", []):
+                if filename == "downloads.json":
+                    base = Path(os.environ.get("RUACH_MODELS_DIR") or kit / "models").resolve()
+                    add("backbone", model["filename"], model, base=base)
+                elif "files" in model:
+                    for file in model["files"]:
+                        record = dict(model, **file)
+                        add("artwork:" + str(model.get("id", "local")), model["directory"] + "/" + file["path"], record)
+                else:
+                    add(str(model.get("profile") or "models"), model["destination"], model)
+        except (OSError, ValueError, TypeError, KeyError, AttributeError):
+            metadata_errors.append("windows/" + filename + " is unreadable or invalid")
+    for group in groups.values():
+        group["size"] = f"{sum(r.get('expected_bytes',0) for r in group['rows']) / 1e9:.3f} GB"
+    last = {"parts":list(groups.values()), "counts":counts, "mode":"local-presence-and-size", "at":int(time.time()),
+            "verification":"size_only; SHA256 must be checked by approved installation tooling"}
+    return {"script":False, "mode":"local", "download_enabled":False, "check_performed":True,
+            "notice":"Local file presence/size only. No remote lookup, download or SHA256 validation was performed.",
+            "instructions":"Review windows/downloads.json, windows/full-audio-models.json and windows/full-art-models.json; approve additional models before running operator installation commands.",
+            "manifest_sources":sources, "metadata_errors":metadata_errors, "last":last, "extras":_extras(kit), "parts":PARTS,
+            "job":None, "free_bytes":_free(kit), "now":int(time.time())}

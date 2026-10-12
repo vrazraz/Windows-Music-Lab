@@ -20,6 +20,13 @@ A run of the same name goes on from its last save (the adapter and the optimizer
 
     .venv/bin/python lab/trainer/train.py CONFIG.json"""
 import glob, json, math, os, random, sqlite3, sys, time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from atomic_audio import replace_file
+from platform_runtime import configure_runtime
+from trainer.control import stop_requested
+configure_runtime(Path(__file__).resolve().parents[2])
 
 import torch
 import torch.nn.functional as F
@@ -141,7 +148,7 @@ def main():
         load_into(loras, load_file(last))
         step = int(os.path.basename(last).rsplit("_", 1)[1].split(".")[0])
         if os.path.isfile(os.path.join(out, "optimizer.pt")):
-            opt.load_state_dict(torch.load(os.path.join(out, "optimizer.pt"), map_location=dev))
+            opt.load_state_dict(torch.load(os.path.join(out, "optimizer.pt"), map_location=dev, weights_only=True))
         print(f"going on from {os.path.basename(last)} (step {step})", flush=True)
     log = StepLog(os.path.join(out, "loss_log.db"))
     print(f"{len(items)} tracks · rank {cfg['rank']} · {cfg['steps']} steps · ready in {time.time() - t0:.0f} s · " +
@@ -151,14 +158,19 @@ def main():
     t_start, done_at_start = time.time(), step
     def save(at):
         path = os.path.join(out, f"{run}_{at:09d}.safetensors")
-        save_file(state_dict(loras), path, metadata={"name": run, "studio": "Ruach Studio", "trainer": "ruach", "step": str(at),
+        save_file(state_dict(loras), path + ".part", metadata={"name": run, "studio": "Windows Music Lab", "trainer": "ruach", "step": str(at),
                                                      "rank": str(cfg["rank"]), "format": "pt"})
-        torch.save(opt.state_dict(), os.path.join(out, "optimizer.pt"))
+        replace_file(path + ".part", path)
+        optimizer = os.path.join(out, "optimizer.pt")
+        torch.save(opt.state_dict(), optimizer + ".part")
+        replace_file(optimizer + ".part", optimizer)
         log.con.commit()
 
     saved_at = step
     try:
         while step < cfg["steps"]:
+            if stop_requested(cfg["out"]):
+                raise KeyboardInterrupt
             if not order:
                 order = list(range(len(items)))
                 random.Random(epoch_seed + step).shuffle(order)
@@ -224,7 +236,9 @@ def main():
         if step > saved_at:
             save(step)
         print(f"stopped at step {step}; saved", flush=True)
-    save_file(state_dict(loras), os.path.join(out, f"{run}.safetensors"), metadata={"name": run, "studio": "Ruach Studio", "trainer": "ruach"})
+    final = os.path.join(out, f"{run}.safetensors")
+    save_file(state_dict(loras), final + ".part", metadata={"name": run, "studio": "Windows Music Lab", "trainer": "ruach"})
+    replace_file(final + ".part", final)
     log.con.commit()
     peak = f" · VRAM peak {torch.cuda.max_memory_allocated() / 2**30:.1f} GB" if dev == "cuda" else ""
     print(f"done: {step} steps in {(time.time() - t_start) / 60:.0f} min{peak}", flush=True)

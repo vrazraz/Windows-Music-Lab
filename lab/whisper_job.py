@@ -6,17 +6,23 @@ when needed and unload at once). Run by lab.py with the GPU already chosen.
     whisper_job.py AUDIO OUT.json LANGUAGE [MODEL] [words]
 "words" (HERESY 1056): each segment carries its words with their times, for karaoke timing.
 """
+from pathlib import Path as _RuntimePath
+from platform_runtime import configure_runtime as _configure_runtime
+_configure_runtime(_RuntimePath(__file__).resolve().parent.parent)
+
 import json, sys, time
-from faster_whisper import WhisperModel
 
 audio, out, lang = sys.argv[1], sys.argv[2], sys.argv[3]
 MODEL = sys.argv[4] if len(sys.argv) > 4 else None
 WORDS = len(sys.argv) > 5 and sys.argv[5] == "words"
+if not MODEL or not _RuntimePath(MODEL).is_dir():
+    raise SystemExit("the local Whisper model folder is missing; install approved weights first")
+from faster_whisper import WhisperModel
 t0 = time.time()
 import os                                          # HERESY 1141: the CPU when the lab found no card for it (int8 there)
 DEVICE = os.environ.get("WHISPER_DEVICE", "cuda")
 model = WhisperModel(MODEL, device=DEVICE, compute_type="float16" if DEVICE == "cuda" else "int8",
-                     cpu_threads=min(16, os.cpu_count() or 4))
+                     cpu_threads=min(16, os.cpu_count() or 4), local_files_only=True)
 t1 = time.time()
 # condition_on_previous_text=False: with it Whisper loops on its own hallucination over
 # music ("Субтитры подогнал «Симон»" ×15) — four of six measurements on 30.09 were that.
@@ -36,6 +42,7 @@ for s in segments:
         seg["words"] = [{"w": w.word.strip(), "s": round(w.start, 2), "e": round(w.end, 2), "p": round(w.probability, 3)}
                         for w in (s.words or [])]
     segs.append(seg)
-json.dump({"segments": segs, "language": info.language, "duration": round(info.duration, 2),
+with open(out, "w", encoding="utf-8") as stream:
+    json.dump({"segments": segs, "language": info.language, "duration": round(info.duration, 2),
            "load_s": round(t1 - t0, 1), "listen_s": round(time.time() - t1, 1)},
-          open(out, "w"), ensure_ascii=False)
+          stream, ensure_ascii=False)

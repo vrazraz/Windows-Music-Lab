@@ -135,6 +135,14 @@
   // HERESY 1086: what the chosen trainer lacks, said by name; the studio's own needs no AI-Toolkit
   function warn() {
     var d = state.data || {}, own = d.own || {}, q = $("tr_quant").value, html = "";
+    var readiness = d.readiness || {};
+    if (readiness.native_windows) {
+      html += '<p class="tr-warn">' + esc(readiness.reason || "Windows: training needs at least 20 000 MB free VRAM.") + '</p>';
+      html += '<p class="tr-warn">Локальная подготовка и условия моделей: <code>' + esc(readiness.docs || "windows/FULL_AUDIO_APPROVAL.md") + '</code>. Автозагрузка отключена; дополнительные пакеты и веса устанавливаются после отдельного согласования.</p>';
+      if (!readiness.supported) html += '<p class="tr-warn">Подготовка наборов и просмотр сохранённых запусков доступны. Новое обучение на этой видеокарте недоступно.</p>';
+      $("trWarn").innerHTML = html;
+      return;
+    }
     if ($("tr_engine").value === "ruach") {
       var lack = [];
       if (!own[q]) lack.push("Comfy-Org's YuE2 " + q + " weights");

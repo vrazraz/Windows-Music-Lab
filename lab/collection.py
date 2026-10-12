@@ -12,6 +12,8 @@ The marks live in the studio's user/ folder (user/collection.json), as the setti
 """
 import json, os, re, shutil, subprocess, threading, time, uuid, zipfile
 from pathlib import Path
+from library_io import read_json, write_json, valid_component, local_child, manifest_file, filename
+from platform_runtime import process_options
 
 LOCK = threading.Lock()
 
@@ -22,7 +24,7 @@ def _store(config_dir):
 
 def load(config_dir):
     p = _store(config_dir)
-    d = json.load(open(p, encoding="utf-8")) if p.is_file() else {}
+    d = read_json(p) if p.is_file() else {}
     d.setdefault("hidden", [])
     d.setdefault("workspaces", {})
     d.setdefault("trash_days", 0)
@@ -174,9 +176,7 @@ def _frozen_guard(d, op, ws, names, data):
 def save(config_dir, d):
     config_dir.mkdir(parents=True, exist_ok=True)
     p = _store(config_dir)
-    tmp = Path(str(p) + ".part")
-    json.dump(d, open(tmp, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
-    os.replace(tmp, p)
+    write_json(p, d)
 
 
 def take_kind(name, meta, req):
@@ -202,18 +202,21 @@ def catalog(outputs, config_dir):
     rows, played, since = [], set(marks["played"]), marks.get("fresh_since") or 0
     ice = frozen_takes(marks)                    # HERESY 1166
     for d in sorted(outputs.iterdir()) if outputs.is_dir() else []:
-        mp = d / "meta.json"
+        if not valid_component(d.name):
+            continue
+        d = local_child(outputs, d.name)
+        mp = manifest_file(d, "meta.json")
         if not mp.is_file():
             continue
         try:
-            meta = json.load(open(mp, encoding="utf-8"))
+            meta = read_json(mp)
         except ValueError:
             continue
         req = {}
-        rp = d / "request.json"
+        rp = manifest_file(d, "request.json")
         if rp.is_file():
             try:
-                r = json.load(open(rp, encoding="utf-8"))
+                r = read_json(rp)
                 req = {k: r.get(k) for k in ("cot", "parent", "plan_only") if k in r}
                 req["semantic_keep"] = bool(r.get("semantic_keep"))
                 req["semantic_tokens"] = bool(r.get("semantic_tokens"))
@@ -225,11 +228,12 @@ def catalog(outputs, config_dir):
             except ValueError:
                 pass
         kinds = set()
-        der = d / "derived"
+        der = manifest_file(d, "derived")
         if der.is_dir():
             for m in der.glob("*/manifest.json"):
                 try:
-                    kinds.add(json.load(open(m, encoding="utf-8")).get("kind"))
+                    m = manifest_file(d, m.relative_to(d).as_posix())
+                    kinds.add(read_json(m).get("kind"))
                 except ValueError:
                     pass
         rows.append({"name": d.name, "title": meta.get("title") or d.name, "created": meta.get("created"),
@@ -245,7 +249,7 @@ def catalog(outputs, config_dir):
 
 def collection_post(config_dir, outputs, data):
     op = data.get("op")
-    names = [n for n in (data.get("names") or []) if isinstance(n, str) and "/" not in n and not n.startswith(".")]
+    names = [n for n in (data.get("names") or []) if valid_component(n)]
     ws = ws_name(data.get("workspace"))
     with LOCK:
         d = load(config_dir)
@@ -381,14 +385,18 @@ def trash_list(kit):
     out = []
     base = trash_dir(kit)
     for day in sorted(base.iterdir()) if base.is_dir() else []:
-        if not day.is_dir():
+        if not valid_component(day.name) or not day.is_dir():
             continue
+        day = local_child(base, day.name)
         for d in sorted(day.iterdir()):
-            mp = d / "meta.json"
+            if not valid_component(d.name):
+                continue
+            d = local_child(day, d.name)
+            mp = manifest_file(d, "meta.json")
             if not mp.is_file():
                 continue
             try:
-                meta = json.load(open(mp, encoding="utf-8"))
+                meta = read_json(mp)
             except ValueError:
                 meta = {}
             size = sum(f.stat().st_size for f in d.rglob("*") if f.is_file())
@@ -399,7 +407,7 @@ def trash_list(kit):
 
 def trash_move(kit, outputs, names, config_dir=None):
     """Takes to the trash; a take in a workspace whose tracks are locked stays, and is said (HERESY 1070)."""
-    day = trash_dir(kit) / time.strftime("%Y-%m-%d")
+    day = local_child(trash_dir(kit), time.strftime("%Y-%m-%d"))
     day.mkdir(parents=True, exist_ok=True)
     moved, kept = [], []
     marks = load(config_dir) if config_dir else None
@@ -408,8 +416,10 @@ def trash_move(kit, outputs, names, config_dir=None):
         if n in guard:
             kept.append(n)
             continue
-        src = outputs / n
-        if "/" in n or n.startswith(".") or not (src / "meta.json").is_file():
+        if not valid_component(n):
+            continue
+        src = local_child(outputs, n)
+        if not manifest_file(src, "meta.json").is_file():
             continue
         dst = day / n
         if dst.exists():
@@ -424,11 +434,13 @@ def trash_restore(kit, outputs, items):
     back = []
     for it in items:
         day, n = str(it.get("day", "")), str(it.get("name", ""))
-        if "/" in day or "/" in n or day.startswith(".") or n.startswith("."):
+        if not valid_component(day) or not valid_component(n):
             continue
-        src = trash_dir(kit) / day / n
-        if src.is_dir() and not (outputs / n).exists():
-            shutil.move(str(src), str(outputs / n))
+        src = local_child(local_child(trash_dir(kit), day), n)
+        target = local_child(outputs, n)
+        if src.is_dir() and not target.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(src), str(target))
             back.append(n)
     return {"restored": back}
 
@@ -441,7 +453,8 @@ def trash_empty(kit, items=None, older_than_days=None):
             continue
         if older_than_days is not None and now - it["trashed"] < older_than_days * 86400:
             continue
-        shutil.rmtree(trash_dir(kit) / it["day"] / it["name"], ignore_errors=True)
+        target = local_child(local_child(trash_dir(kit), it["day"]), it["name"])
+        shutil.rmtree(target)
         gone.append(it["name"])
     for day in trash_dir(kit).iterdir() if trash_dir(kit).is_dir() else []:
         if day.is_dir() and not any(day.iterdir()):
@@ -454,17 +467,18 @@ EXPORTS = {}
 
 
 def _fname(title, used, ext):
-    base = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', " ", title).strip()[:80] or "take"
+    base = filename(title)
     name, i = f"{base}{ext}", 2
-    while name in used:
+    while name.casefold() in used:
         name, i = f"{base} ({i}){ext}", i + 1
-    used.add(name)
+    used.add(name.casefold())
     return name
 
 
 def export_start(kit, outputs, names, fmt, derived):
     if fmt not in ("flac", "wav"):
         raise ValueError("flac or wav")
+    names = list(dict.fromkeys(n for n in names if valid_component(n)))
     xid = uuid.uuid4().hex[:12]
     out_dir = kit / "tmp" / "exports"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -472,36 +486,46 @@ def export_start(kit, outputs, names, fmt, derived):
     EXPORTS[xid] = job
 
     def work():
+        path = out_dir / f"windows-music-lab-{time.strftime('%Y%m%d-%H%M')}-{xid}.zip"
+        part, temporary = path.with_suffix(".zip.part"), out_dir / f"{xid}.flac"
         try:
-            path = out_dir / f"yue2-os-{time.strftime('%Y%m%d-%H%M')}-{xid}.zip"
             used = set()
-            with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_STORED, allowZip64=True) as z:
+            with zipfile.ZipFile(part, "w", compression=zipfile.ZIP_STORED, allowZip64=True) as z:
                 for n in names:
-                    d = outputs / n
-                    if "/" in n or not (d / "meta.json").is_file():
+                    d = local_child(outputs, n)
+                    if not manifest_file(d, "meta.json").is_file():
                         continue
-                    meta = json.load(open(d / "meta.json", encoding="utf-8"))
+                    meta = read_json(d / "meta.json")
                     title = meta.get("title") or n
-                    src = d / "audio.wav"
-                    if src.is_file():
-                        if fmt == "wav":
-                            z.write(src, _fname(title, used, ".wav"))
+                    src = next((manifest_file(d, f) for f in ("audio.wav", "audio.flac", "audio.mp3")
+                                if manifest_file(d, f).is_file()), None)
+                    if src:
+                        if src.suffix == "." + fmt:
+                            z.write(src, _fname(title, used, "." + fmt))
                         else:
-                            tmp = out_dir / f"{xid}.flac"
-                            subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-c:a", "flac", "-metadata", f"title={title}", str(tmp)], check=True)
-                            z.write(tmp, _fname(title, used, ".flac"))
-                            tmp.unlink()
+                            temporary = out_dir / f"{xid}.{fmt}"
+                            codec = "flac" if fmt == "flac" else "pcm_s24le"
+                            subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-c:a", codec,
+                                            "-metadata", f"title={title}", str(temporary)],
+                                           check=True, timeout=600, **process_options())
+                            z.write(temporary, _fname(title, used, "." + fmt))
+                            temporary.unlink()
                     if derived and (d / "derived").is_dir():
                         for m in sorted((d / "derived").glob("*/manifest.json")):
-                            man = json.load(open(m, encoding="utf-8"))
+                            m = manifest_file(d, m.relative_to(d).as_posix())
+                            man = read_json(m)
                             for f in man.get("files", []):
-                                fp = d / f.get("path", "")
+                                fp = manifest_file(d, f.get("path", ""))
                                 if fp.is_file():
                                     z.write(fp, _fname(f"{title} - {f.get('name') or fp.stem}", used, fp.suffix))
                     job["done"] += 1
+            part.replace(path)
             job.update(status="done", file=path.name, bytes=path.stat().st_size)
         except Exception as e:
             job.update(status="failed", error=str(e))
+        finally:
+            part.unlink(missing_ok=True)
+            temporary.unlink(missing_ok=True)
     threading.Thread(target=work, daemon=True).start()
     return dict(job, id=xid)
 

@@ -19,6 +19,10 @@ by this VAE (an import) shows no more at 1920 than at the controls, and is said 
     PERIOD and RATE are the model's (HERESY 1055: the page sends sample_rate / frame_rate from /props)
     prints one line of JSON: the fold depth in, out and at the controls, the gain range
 """
+from pathlib import Path as _RuntimePath
+from platform_runtime import configure_runtime as _configure_runtime
+_configure_runtime(_RuntimePath(__file__).resolve().parent.parent)
+
 import json, sys, time
 import numpy as np
 import soundfile as sf

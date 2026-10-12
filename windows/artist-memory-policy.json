@@ -1,0 +1,220 @@
+{
+  "profile": "sdxl512-sequential-win-v1",
+  "status": "blocked_after_import_before_model_load",
+  "production_mode": "component_cpu_offload",
+  "approved_scope": "one 512x512 text-only frame, 12 steps, no refs/masks/LoRA/variants/upscale",
+  "budgets_GiB": {
+    "before_import": {
+      "commit_headroom": 11.5,
+      "available_RAM": 9
+    },
+    "after_import": {
+      "commit_headroom": 9.5,
+      "available_RAM": 8
+    },
+    "before_inference_and_step": {
+      "commit_headroom": 2,
+      "available_RAM": 1
+    }
+  },
+  "derivation": {
+    "fp16_weight_files_GiB": 6.461526667699218,
+    "estimated_import_GiB": 2,
+    "estimated_transient_and_VAE_fp32_GiB": 1,
+    "reserve_GiB": 2,
+    "inference_peak_measured": false,
+    "note": "Windows COW mmap still reserves full view commit. Sequential preserves original CPU state_dict; it avoids whole-model GPU to CPU replacement copies, not the original commit charge.",
+    "import_allowance_basis": "One actual worker import-only attempt: about 2 GiB private commit; model load/denoising never started. Future 11.5 GiB admission equals unchanged 9.5 GiB post-import budget plus 2 GiB import allowance."
+  },
+  "installed_source_evidence": [
+    {
+      "file": ".venv-art/Lib/site-packages/diffusers/pipelines/pipeline_utils.py",
+      "lines": [
+        1293,
+        1359
+      ],
+      "fact": "Sequential saves CPU state dictionaries and attaches per-submodule Accelerate hooks; accelerator required; no Linux-only branch."
+    },
+    {
+      "file": ".venv-art/Lib/site-packages/accelerate/big_modeling.py",
+      "lines": [
+        209,
+        219
+      ],
+      "fact": "Original CPU state_dict retained for cpu_offload."
+    },
+    {
+      "file": ".venv-art/Lib/site-packages/accelerate/hooks.py",
+      "lines": [
+        371,
+        410
+      ],
+      "fact": "Fetch original weight map per forward; replace parameters with meta after forward, instead of copying GPU weights back to CPU."
+    },
+    {
+      "file": ".venv-art/Lib/site-packages/accelerate/hooks.py",
+      "lines": [
+        744,
+        763
+      ],
+      "fact": "Component offload performs module.to(cpu) and module.to(execution_device)."
+    },
+    {
+      "file": ".venv-art/Lib/site-packages/diffusers/models/model_loading_utils.py",
+      "lines": [
+        154,
+        171,
+        229,
+        247
+      ],
+      "fact": "safetensors load_file mmap unless disabled; dtype conversion requestedfloat16, so F16 tensors retain matching dtype."
+    },
+    {
+      "file": ".venv-art/Lib/site-packages/transformers/modeling_utils.py",
+      "lines": [
+        4450,
+        4472
+      ],
+      "fact": "Windows uses pread, explicitly because mmap reserves COW commit for the entire file."
+    },
+    {
+      "file": ".venv-art/Lib/site-packages/diffusers/pipelines/stable_diffusion_xl/pipeline_stable_diffusion_xl.py",
+      "lines": [
+        1262,
+        1294
+      ],
+      "fact": "VAE force_upcast promotes dtype for decode, then restores fp16; transient budget includes this."
+    }
+  ],
+  "primary_sources": [
+    {
+      "url": "https://raw.githubusercontent.com/huggingface/safetensors/v0.8.0/bindings/python/src/lib.rs",
+      "lines": [
+        715,
+        755
+      ],
+      "fact": "Torch mmap uses UntypedStorage.from_file(shared=False)."
+    },
+    {
+      "url": "https://raw.githubusercontent.com/pytorch/pytorch/v2.11.0/aten/src/ATen/MapAllocator.cpp",
+      "lines": [
+        198,
+        207
+      ],
+      "fact": "Windows private mapping uses PAGE_WRITECOPY and FILE_MAP_COPY."
+    },
+    {
+      "url": "https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-mapviewoffile",
+      "fact": "COW commit charge covers the entire view even before writes."
+    },
+    {
+      "url": "https://huggingface.co/docs/diffusers/en/optimization/memory",
+      "fact": "Sequential offload works per submodule and is much slower. Do not move pipeline to CUDA first."
+    }
+  ],
+  "synthetic_native_proof": {
+    "date": "2026-10-12",
+    "fixture_bytes": 67108864,
+    "readonly_mapping_commit_delta_bytes": 0,
+    "copy_mapping_commit_delta_bytes": 68034560,
+    "after_closed_delta_bytes": 794624,
+    "commit_metric": "GetPerformanceInfo CommitTotal*PageSize; background allocation noise possible",
+    "ML_imports": false,
+    "GPU_access": false
+  },
+  "limitations": [
+    "Estimated guard is not an inference bound or OOM guarantee.",
+    "Only the harness verifies pinned model file SHA256.",
+    "Production LoRA, masks, variants and other painters are preserved but real inference remains untested.",
+    "One real import-only worker attempt stopped safely; no model load or image inference was performed. The shared durable claim remains and blocks any retry."
+  ],
+  "policy_revision": 2,
+  "attempt_history": [
+    {
+      "run": "20261012-233238-7136",
+      "mode": "standalone-production-worker",
+      "status": "blocked_after_import_before_model_load",
+      "claim_status": "blocked_before_model_load",
+      "original_before_import_admission_GiB": 11,
+      "original_import_allowance_GiB": 1.5,
+      "after_import_required_commit_GiB": 9.5,
+      "before_import": {
+        "stage": "before_import",
+        "unix": 1791837158.6912687,
+        "system": {
+          "total": 34222723072,
+          "available": 18569449472,
+          "ram_source": "GetPerformanceInfo.PhysicalAvailable",
+          "commit_limit": 39465603072,
+          "commit_used": 27453304832,
+          "commit_available": 12012298240,
+          "commit_source": "GetPerformanceInfo(machine-wide)",
+          "commit_scope": "machine",
+          "page_size": 4096
+        },
+        "private_bytes": 12906496,
+        "working_set_bytes": 22536192,
+        "peak_working_set_bytes": 22536192,
+        "peak_process_commit_bytes": 12906496,
+        "peak_private_bytes_sampled": 12906496,
+        "sample_interval_s": 0.1,
+        "validation_profile": "sdxl512-sequential-win-v1",
+        "offload_mode": "sequential",
+        "weights_storage": "Diffusers private COW mmap; Transformers Windows pread CPU tensors",
+        "weight_dtype": "float16",
+        "guard_reason": "Windows sequential CPU offload; 6.46 GiB fp16 weights still consume commit (Diffusers COW mmap and Transformers Windows pread). Estimated 1.5 GiB imports, 1 GiB transient allocations/VAE fp32, 2 GiB reserve; not a measured inference bound"
+      },
+      "after_import": {
+        "stage": "after_import",
+        "unix": 1791837189.9357567,
+        "system": {
+          "total": 34222723072,
+          "available": 17812267008,
+          "ram_source": "GetPerformanceInfo.PhysicalAvailable",
+          "commit_limit": 39465603072,
+          "commit_used": 29561376768,
+          "commit_available": 9904226304,
+          "commit_source": "GetPerformanceInfo(machine-wide)",
+          "commit_scope": "machine",
+          "page_size": 4096
+        },
+        "private_bytes": 2140987392,
+        "working_set_bytes": 719384576,
+        "peak_working_set_bytes": 719384576,
+        "peak_process_commit_bytes": 2140987392,
+        "peak_private_bytes_sampled": 2140987392,
+        "sample_interval_s": 0.1,
+        "validation_profile": "sdxl512-sequential-win-v1",
+        "offload_mode": "sequential",
+        "weights_storage": "Diffusers private COW mmap; Transformers Windows pread CPU tensors",
+        "weight_dtype": "float16"
+      },
+      "observed_machine_commit_delta_bytes": 2108071936,
+      "observed_private_bytes_delta": 2128080896,
+      "model_weights_loaded": false,
+      "denoising_steps": 0,
+      "PNG_files": 0,
+      "retry_performed": false,
+      "reason": "The original 11 GiB gate admitted the child, but import private memory reached about 2 GiB and machine commit headroom fell to 9.22 GiB, below the unchanged 9.5 GiB after-import guard. Worker exited before painter()/model load."
+    }
+  ],
+  "final_readonly_snapshot": {
+    "unix_utc": "2026-10-12T20:37:32.953706+00:00",
+    "system": {
+      "total": 34222723072,
+      "available": 18572644352,
+      "ram_source": "GetPerformanceInfo.PhysicalAvailable",
+      "commit_limit": 39465603072,
+      "commit_used": 27363586048,
+      "commit_available": 12102017024,
+      "commit_source": "GetPerformanceInfo(machine-wide)",
+      "commit_scope": "machine",
+      "page_size": 4096
+    },
+    "future_required_commit_bytes": 12348030976,
+    "future_required_ram_bytes": 9663676416,
+    "future_admission_passes": false,
+    "claim_preserved": true,
+    "retry_performed": false
+  }
+}

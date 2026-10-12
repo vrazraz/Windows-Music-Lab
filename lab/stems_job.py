@@ -10,6 +10,10 @@ nothing is downloaded. Prints one line of JSON: the stems, their models and the 
 
     stems_job.py AUDIO OUTDIR vocals|four
 """
+from pathlib import Path as _RuntimePath
+from platform_runtime import configure_runtime as _configure_runtime
+_configure_runtime(_RuntimePath(__file__).resolve().parent.parent)
+
 import json, os, shutil, sys, time
 from pathlib import Path
 
@@ -21,8 +25,21 @@ ROFORMER = "model_bs_roformer_ep_317_sdr_12.9755.ckpt"
 DEMUCS_DIR = os.environ.get("LAB_DEMUCS_DIR", str(KIT / "separation/demucs"))
 DEMUCS = "htdemucs_ft.yaml"
 
+if mode not in ("vocals", "four"):
+    raise SystemExit("stem mode must be vocals or four")
+required = [(Path(ROFORMER_DIR), ROFORMER),
+            (Path(ROFORMER_DIR), "model_bs_roformer_ep_317_sdr_12.9755.yaml")]
+if mode == "four":
+    required += [(Path(DEMUCS_DIR), name) for name in
+                 (DEMUCS, "f7e0c4bc-ba3fe64a.th", "d12395a8-e57c48e6.th", "92cfc3b6-ef3bcb9c.th", "04573f0d-f3cf25b2.th")]
+missing = [str(folder / name) for folder, name in required if not (folder / name).is_file()]
+if missing:
+    raise SystemExit("local separation weights/config are missing: " + ", ".join(missing))
+
 import soundfile as sf
-from audio_separator.separator import Separator
+from audio_separator.separator import Separator as _Separator
+from separation_local import local_separator_class
+Separator = local_separator_class(_Separator)
 
 t0 = time.time()
 outdir.mkdir(parents=True, exist_ok=True)

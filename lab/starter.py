@@ -10,6 +10,7 @@ words, never shown as an empty list.
     POST /train/starter {name}     fetch one"""
 import os, shutil, subprocess, threading, time
 from pathlib import Path
+from platform_runtime import WINDOWS, job_environment, require_network
 
 REPO = "goldhub/Ruach_Studio_Starter_Sets"
 TERMS = "GTSinger, CC BY-NC-SA 4.0: attribution, non-commercial, share-alike; an adapter trained on it carries the same terms"
@@ -56,6 +57,7 @@ def listing(kit):
 
 
 def fetch(kit, name):
+    require_network("starter dataset download")
     s = next((x for x in SETS if x["name"] == name), None)
     if not s:
         raise ValueError(f"no starter set named {name}")
@@ -72,17 +74,17 @@ def fetch(kit, name):
 def _run(kit, s):
     stage, name = _stage(kit), s["name"]
     stage.mkdir(parents=True, exist_ok=True)
-    env = dict(os.environ, HF_HOME=str(kit / "tmp" / "hf"), HF_HUB_DISABLE_TELEMETRY="1")
-    token = Path.home() / ".cache" / "huggingface" / "token"     # private until the release: the owner's own token
-    if "HF_TOKEN" not in env and token.is_file():
-        env["HF_TOKEN_PATH"] = str(token)
-    cmd = [str(kit / ".venv" / "bin" / "hf"), "download", REPO, "--repo-type", "dataset",
+    require_network("starter dataset download")
+    env = job_environment(kit)
+    # Public data needs no credential discovery outside the project.
+    hf = kit / ".venv" / ("Scripts/hf.exe" if WINDOWS else "bin/hf")
+    cmd = [str(hf), "download", REPO, "--repo-type", "dataset",
            "--include", name + "/*", "--local-dir", str(stage)]
     rev = _revision(kit)
     if rev:
         cmd += ["--revision", rev]
     try:
-        r = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=6 * 3600)
+        r = subprocess.run(cmd, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=6 * 3600)
         got = stage / name
         if r.returncode != 0:
             raise RuntimeError((r.stderr or r.stdout).strip().splitlines()[-1] if (r.stderr or r.stdout).strip() else f"hf exited {r.returncode}")

@@ -40,6 +40,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "windows-local-runtime.h"
+
 #ifdef _WIN32
 #    include <fcntl.h>
 #    include <io.h>
@@ -187,6 +189,7 @@ struct Job {
     std::vector<std::string> takes;
     std::string              abc;
     std::string              error;
+    std::atomic<bool>        waiting_gpu{ false };
     std::atomic<bool>        started{ false };  // false while it waits in the queue
     int64_t                  lm_seed = -1;      // resolved seeds of a synth job
     int64_t                  seed    = -1;
@@ -206,6 +209,7 @@ static const int                                             MAX_JOBS = 32;
 // within one pipeline cancel poll instead of waiting out the generation.
 static std::mutex           mtx_active;
 static std::shared_ptr<Job> g_active_job;
+static std::shared_ptr<Job> g_waiting_job;
 
 // HERESY 1167 (Viktor: «таймер вбить для `Models auto unload`. Дефолт 60 минут»): when the last job began or ended, on the
 // steady clock, and whether this idle spell has had its unload yet
@@ -225,6 +229,7 @@ static void active_job_set(std::shared_ptr<Job> job) {
 
 static void active_job_cancel() {
     std::lock_guard<std::mutex> lock(mtx_active);
+    if (g_waiting_job) g_waiting_job->cancel.store(true);
     if (g_active_job && g_active_job->status.load() == JobStatus::RUNNING) {
         fprintf(stderr, "[Server] Cancelling active job %s\n", g_active_job->id.c_str());
         g_active_job->cancel.store(true);
@@ -523,39 +528,85 @@ static void handle_logs(const httplib::Request &, httplib::Response & res) {
 }
 
 // work queue: one worker owns the models, jobs run in FIFO order
-static std::deque<std::function<void()>> g_work_queue;
-static std::mutex                        mtx_work;
-static std::condition_variable           cv_work;
-static bool                              g_work_stop = false;
+struct WorkItem {
+    std::function<void()> fn;
+    std::shared_ptr<Job> gpu_job; // null for metadata/settings/unload control work
+};
+static std::deque<WorkItem> g_work_queue;
+static std::mutex mtx_work;
+static std::condition_variable cv_work;
+static bool g_work_stop = false;
+static void idle_unload_check();
 
-static void idle_unload_check();   // HERESY 1167: below, with the settings
-
-static void work_push(std::function<void()> fn) {
+static void work_push(std::function<void()> fn, std::shared_ptr<Job> gpu_job = nullptr) {
     {
         std::lock_guard<std::mutex> lock(mtx_work);
-        g_work_queue.push_back(std::move(fn));
+        g_work_queue.push_back({std::move(fn), std::move(gpu_job)});
     }
     cv_work.notify_one();
 }
-
+// While Python owns the GPU, only control work can bypass the waiting render.
+// This keeps model ownership on one thread and permits Python's /unload handoff.
+static void work_control_while_waiting() {
+    std::function<void()> control;
+    {
+        std::lock_guard<std::mutex> lock(mtx_work);
+        auto found = std::find_if(g_work_queue.begin(), g_work_queue.end(),
+                                  [](const WorkItem &item) { return !item.gpu_job; });
+        if (found != g_work_queue.end()) {
+            control = std::move(found->fn);
+            g_work_queue.erase(found);
+        }
+    }
+    if (control) control();
+}
 static void worker_main() {
     for (;;) {
-        std::function<void()> job;
+        WorkItem item;
         {
             std::unique_lock<std::mutex> lock(mtx_work);
-            // HERESY 1167: idle, the worker looks every 5 s whether the models have stayed past their time
             if (!cv_work.wait_for(lock, std::chrono::seconds(5), [] { return g_work_stop || !g_work_queue.empty(); })) {
                 lock.unlock();
                 idle_unload_check();
                 continue;
             }
-            if (g_work_stop && g_work_queue.empty()) {
-                return;
-            }
-            job = std::move(g_work_queue.front());
+            if (g_work_stop && g_work_queue.empty()) return;
+            item = std::move(g_work_queue.front());
             g_work_queue.pop_front();
         }
-        job();
+        if (!item.gpu_job) { item.fn(); continue; }
+        auto job = item.gpu_job;
+        {
+            std::lock_guard<std::mutex> lock(mtx_active);
+            g_waiting_job = job;
+            job->waiting_gpu.store(true);
+        }
+        try {
+            wml::GpuLease lease;
+            bool acquired = false;
+            while (!job->cancel.load()) {
+                { std::lock_guard<std::mutex> lock(mtx_work); if (g_work_stop) break; }
+                if ((acquired = lease.try_acquire(100))) break;
+                work_control_while_waiting();
+            }
+            {
+                std::lock_guard<std::mutex> lock(mtx_active);
+                job->waiting_gpu.store(false);
+                g_waiting_job.reset();
+            }
+            if (acquired && !job->cancel.load()) item.fn();
+            else job->status.store(JobStatus::CANCELLED);
+        } catch (const std::exception &error) {
+            {
+                std::lock_guard<std::mutex> lock(mtx_active);
+                job->waiting_gpu.store(false);
+                g_waiting_job.reset();
+                g_active_job.reset();
+            }
+            job->error = error.what();
+            job->status.store(JobStatus::FAILED);
+            fprintf(stderr, "[Server] GPU job failed: %s\n", error.what());
+        }
     }
 }
 
@@ -1218,6 +1269,13 @@ static std::string hardware_json() {
     {
         std::lock_guard<std::mutex> lock(mtx_active);
         yyjson_mut_obj_add_bool(doc, root, "busy", g_active_job != nullptr);
+        yyjson_mut_obj_add_bool(doc, root, "waiting_gpu", g_waiting_job != nullptr);
+    }
+    {
+        std::lock_guard<std::mutex> lock(mtx_work);
+        int queued = 0;
+        for (const auto &item : g_work_queue) if (item.gpu_job) ++queued;
+        yyjson_mut_obj_add_int(doc, root, "queued_jobs", queued);
     }
     char *      json = yyjson_mut_write(doc, 0, NULL);
     std::string out  = json ? json : "{}";
@@ -1336,6 +1394,7 @@ static std::string job_status_json(const Job & job) {
     yyjson_mut_doc_set_root(doc, root);
     yyjson_mut_obj_add_str(doc, root, "status",
                            status == JobStatus::RUNNING && !job.started.load() ? "queued" : job_status_str(status));
+    yyjson_mut_obj_add_bool(doc, root, "waiting_gpu", job.waiting_gpu.load());
     if (job.lm_seed >= 0) {
         yyjson_mut_obj_add_sint(doc, root, "lm_seed", job.lm_seed);
         yyjson_mut_obj_add_sint(doc, root, "seed", job.seed);
@@ -1793,6 +1852,27 @@ static void print_usage(const char * prog) {
             prog);
 }
 
+// Shared by every route, including proxies and GET routes with expensive work.
+static httplib::Server::HandlerResponse server_request_guard(const httplib::Request &req, httplib::Response &res,
+                                                             int port, bool allow_public) {
+    if (wml::local_only()) {
+        const char *lab_env = getenv("LAB_PORT");
+        const int lab_port = lab_env && *lab_env ? atoi(lab_env) : 41871;
+        if (wml::request_allowed(req.remote_addr, req.get_header_value("Host"),
+                                 req.get_header_value("Origin"), req.get_header_value("Referer"),
+                                 req.get_header_value("Sec-Fetch-Site"), port, lab_port))
+            return httplib::Server::HandlerResponse::Unhandled;
+        res.status = 403;
+        res.set_content(json_string("error", "Windows Music Lab accepts local requests from its own interface only"), "application/json");
+        return httplib::Server::HandlerResponse::Handled;
+    }
+    if (allow_public || is_private_addr(req.remote_addr)) return httplib::Server::HandlerResponse::Unhandled;
+    res.status = 403;
+    res.set_content(json_string("error", "Ruach Studio answers this machine and private networks only (RUACH_ALLOW_PUBLIC=1 opens it)"),
+                    "application/json");
+    return httplib::Server::HandlerResponse::Handled;
+}
+
 int main(int argc, char ** argv) {
     if (argc < 2) {
         print_usage(argv[0]);
@@ -1882,6 +1962,11 @@ int main(int argc, char ** argv) {
         }
     }
 
+    if (wml::local_only() && (!wml::loopback(host) || port < 1 || port > 65535)) {
+        fprintf(stderr, "[Server] Local Windows mode requires a loopback bind and valid port\n");
+        return 1;
+    }
+
     if (g_model_path.empty() || g_vae_path.empty()) {
         print_usage(argv[0]);
         return 1;
@@ -1923,10 +2008,25 @@ int main(int argc, char ** argv) {
         std::filesystem::create_directories(g_outputs_dir, ec);
         fprintf(stderr, "[Server] Library: %s\n", g_outputs_dir.c_str());
     }
-    if (!pipeline_configure(&g_pipeline, g_model_path.c_str(), g_vae_path.c_str(), params)) {
+    try {
+        wml::GpuLease startup_lease;
+        const auto lease_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+        while (!startup_lease.try_acquire(100)) {
+            if (std::chrono::steady_clock::now() > lease_deadline) {
+                fprintf(stderr, "[Server] GPU is in use; retry after the current module finishes\n");
+                store_free(g_pipeline.store);
+                return 1;
+            }
+        }
+        if (!pipeline_configure(&g_pipeline, g_model_path.c_str(), g_vae_path.c_str(), params)) {
+            store_free(g_pipeline.store);
+            return 1;
+        }
+    } catch (const std::exception &error) {
+        fprintf(stderr, "[Server] Startup GPU lease failed: %s\n", error.what());
         store_free(g_pipeline.store);
         return 1;
-    }
+    } // release startup GPU lease before serving HTTP
 
     std::thread worker(worker_main);
 
@@ -1940,12 +2040,8 @@ int main(int argc, char ** argv) {
     g_svr = &svr;
     // HERESY 1114: this machine and private networks only, unless RUACH_ALLOW_PUBLIC=1
     static const bool allow_public = [] { const char * e = getenv("RUACH_ALLOW_PUBLIC"); return e && *e && strcmp(e, "0") != 0; }();
-    svr.set_pre_routing_handler([](const httplib::Request & req, httplib::Response & res) {
-        if (allow_public || is_private_addr(req.remote_addr)) return httplib::Server::HandlerResponse::Unhandled;
-        res.status = 403;
-        res.set_content(json_string("error", "Ruach Studio answers this machine and private networks only (RUACH_ALLOW_PUBLIC=1 opens it)"),
-                        "application/json");
-        return httplib::Server::HandlerResponse::Handled;
+    svr.set_pre_routing_handler([port](const httplib::Request & req, httplib::Response & res) {
+        return server_request_guard(req, res, port, allow_public);
     });
 
     // SO_REUSEADDR lets us rebind a port still in TIME_WAIT after a restart.
@@ -2093,7 +2189,7 @@ int main(int argc, char ** argv) {
         auto job     = job_create();
         job->lm_seed = request.lm_seed;
         job->seed    = request.seed;
-        work_push([job, request] { run_job(job, request); });
+        work_push([job, request] { run_job(job, request); }, job);
         res.set_content(json_string("id", job->id), "application/json");
     });
 
@@ -2107,7 +2203,7 @@ int main(int argc, char ** argv) {
             std::string from_take;
             if (req.has_param("take")) {
                 std::string name = req.get_param_value("take");
-                if (g_outputs_dir.empty() || name.empty() || name.find('/') != std::string::npos || name.find("..") != std::string::npos) {
+                if (g_outputs_dir.empty() || !library_name_ok(name)) {
                     res.status = 400;
                     res.set_content(json_string("error", "bad take name"), "application/json");
                     return;
@@ -2135,7 +2231,7 @@ int main(int argc, char ** argv) {
                 return;
             }
             auto job = job_create();
-            work_push([job, audio, melody_only] { run_transcribe(job, audio, melody_only); });
+            work_push([job, audio, melody_only] { run_transcribe(job, audio, melody_only); }, job);
             res.set_content(json_string("id", job->id), "application/json");
         });
     }
@@ -2201,7 +2297,7 @@ int main(int argc, char ** argv) {
         bool applied = work_run_soon(
             [freed] {
                 *freed = store_unload_idle(g_pipeline.store);
-                if (store_policy(g_pipeline.store) == EVICT_NEVER) {
+                if (wml::local_only() || store_policy(g_pipeline.store) == EVICT_NEVER) {
                     qw3lm_kv_free(&g_pipeline.kv);
                 }
                 refresh_loaded();
@@ -2248,8 +2344,9 @@ int main(int argc, char ** argv) {
             std::error_code ec;
             auto dir  = std::filesystem::weakly_canonical(g_outputs_dir + "/" + name + "/derived", ec);
             auto file = std::filesystem::weakly_canonical(g_outputs_dir + "/" + name + "/" + rel, ec);
-            auto d = dir.string(), f = file.string();
-            if (ec || f.rfind(d + "/", 0) != 0 || !std::filesystem::is_regular_file(file)) {
+            const auto relative = file.lexically_relative(dir);
+            const auto f = file.string();
+            if (ec || relative.empty() || relative.is_absolute() || *relative.begin() == ".." || !std::filesystem::is_regular_file(file)) {
                 res.status = 404;
                 res.set_content(json_string("error", "no such file"), "application/json");
                 return;

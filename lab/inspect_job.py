@@ -17,6 +17,10 @@
 
     inspect_job.py AUDIO OUT.json
 """
+from pathlib import Path as _RuntimePath
+from platform_runtime import configure_runtime as _configure_runtime
+_configure_runtime(_RuntimePath(__file__).resolve().parent.parent)
+
 import json, subprocess, sys, time
 import numpy as np
 import soundfile as sf
@@ -175,7 +179,7 @@ R["framebuzz"] = {"hz": [25, 50, 75, 100, 125, 150], "windows": wins,
 
 # ---- loudness (ffmpeg ebur128)
 p = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", src, "-af", "ebur128=peak=true:framelog=quiet", "-f", "null", "-"],
-                   capture_output=True, text=True)
+                   capture_output=True, text=True, encoding="utf-8", errors="replace")
 lo = {}
 for line in p.stderr.splitlines():
     s = line.strip()

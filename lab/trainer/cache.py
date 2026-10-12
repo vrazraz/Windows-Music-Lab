@@ -7,6 +7,12 @@ _ruach_cache/NNN_ruach.safetensors. AI-Toolkit's own _latent_cache is neither to
 
     .venv/bin/python lab/trainer/cache.py SET_FOLDER [--only 001,002] [--device cuda] [--out DIR]"""
 import argparse, glob, os, sys, time
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from atomic_audio import replace_file
+from platform_runtime import configure_runtime
+from trainer.control import stop_requested
+configure_runtime(Path(__file__).resolve().parents[2])
 
 import torch
 
@@ -57,6 +63,8 @@ def build(set_folder, checkpoint, kit, device="cuda", only=None, out_dir=None):
     wavs = [w for w in wavs if not os.path.isfile(os.path.join(out_dir, os.path.basename(w)[:-4] + "_ruach.safetensors"))]
     if not wavs:
         return 0
+    if stop_requested(kit):
+        raise KeyboardInterrupt
     t0 = time.time()
     vae = load_vae(checkpoint, device)
     tok = SemanticTokenizer(os.path.join(kit, "checkpoints/yue2-mothersuperior-realaudio-tokenizer-v4", HEAD),
@@ -64,6 +72,8 @@ def build(set_folder, checkpoint, kit, device="cuda", only=None, out_dir=None):
     print(f"cache: VAE and MERT head ready in {time.time() - t0:.0f} s; {len(wavs)} tracks", flush=True)
     from safetensors.torch import save_file
     for i, wav in enumerate(wavs):
+        if stop_requested(kit):
+            raise KeyboardInterrupt
         stem = os.path.basename(wav)[:-4]
         w = stereo48(wav)
         with torch.no_grad():
@@ -74,7 +84,7 @@ def build(set_folder, checkpoint, kit, device="cuda", only=None, out_dir=None):
         save_file({"latent": lat[:n].to(torch.bfloat16).cpu(), "dto.tokens": tokens[:n].to(torch.int32).cpu()}, target + ".part",
                   metadata={"filename": stem + ".wav", "is_audio_model": "true", "latent_space_version": VERSION,
                             "sample_rate": str(SAMPLE_RATE), "software": "ruach-studio lab/trainer/cache.py"})
-        os.replace(target + ".part", target)
+        replace_file(target + ".part", target)
         print(f"cache: {i + 1}/{len(wavs)} {stem}: {n} frames", flush=True)
     del vae, tok
     if device == "cuda":

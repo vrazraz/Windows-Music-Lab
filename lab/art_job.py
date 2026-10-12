@@ -38,12 +38,14 @@ Prints one JSON line: the prompt, the seed, the models, each picture the critic 
 import json, os, random, re, subprocess, sys, time
 from pathlib import Path
 
+from platform_runtime import configure_runtime, run_process
+
 KIT = Path(__file__).resolve().parent.parent
 PROMPTER = KIT / "artwork" / "Qwen3-4B-Instruct-2507"
 LINK = KIT / "artwork" / "SDXL-Artwork-Model"
 OURS = KIT / "artwork" / "CyberRealistic-XL-v10"
 LOOKS = Path(__file__).resolve().parent / "art_looks.json"
-CLI = KIT / "vendor" / "llama.cpp" / "build" / "bin" / "llama-mtmd-cli"
+CLI = KIT / "vendor" / "llama.cpp" / "build" / "bin" / ("llama-mtmd-cli.exe" if os.name == "nt" else "llama-mtmd-cli")
 OMNI = KIT / "checkpoints" / "Qwen2.5-Omni-7B-GGUF"
 # the listener's ladder (training.py LISTENERS), its llama.cpp rungs: the first on disk looks (Q8_0 with the Q8_0
 # projector: 5.7 s a picture, 10.5 GB, measured 03.10.2026; the projector reads pictures as well as sound)
@@ -109,7 +111,7 @@ def krea_transformer(path):
             n = re.sub(a, b, n)
         sd[n] = v
     with torch.device("meta"):
-        m = Krea2Transformer2DModel.from_config(Krea2Transformer2DModel.load_config(KREA / "transformer"))
+        m = Krea2Transformer2DModel.from_config(Krea2Transformer2DModel.load_config(KREA / "transformer", local_files_only=True))
         gu._replace_with_gguf_linear(m, torch.bfloat16, sd)
     want = set(m.state_dict().keys())
     if want != set(sd):
@@ -128,14 +130,14 @@ class Krea:
         import torch
         import transformers
         if int(transformers.__version__.split(".")[0]) < 5:
-            raise RuntimeError("Krea 2 paints in .venv-art (transformers 5): lab/install-venv.sh --art")
+            raise RuntimeError("Krea 2 paints in .venv-art (transformers 5): windows/Install-Full.ps1 -Artist")
         from diffusers import Krea2Pipeline
         path = MUSE[painter]
         for need in (path, KREA / "text_encoder", KREA / "vae"):
             if not need.exists():
-                raise RuntimeError(f"{need.relative_to(KIT)} is not here: heresy/fetch-heresy.sh --artwork")
-        self.te = Krea2Pipeline.from_pretrained(KREA, transformer=None, vae=None, torch_dtype=torch.bfloat16)
-        self.pipe = Krea2Pipeline.from_pretrained(KREA, transformer=krea_transformer(path), text_encoder=None, torch_dtype=torch.bfloat16)
+                raise RuntimeError(f"{need.relative_to(KIT)} is not here: install the approved Artist model files locally")
+        self.te = Krea2Pipeline.from_pretrained(KREA, transformer=None, vae=None, torch_dtype=torch.bfloat16, local_files_only=True)
+        self.pipe = Krea2Pipeline.from_pretrained(KREA, transformer=krea_transformer(path), text_encoder=None, torch_dtype=torch.bfloat16, local_files_only=True)
         self.pipe.set_progress_bar_config(disable=True)
         self.where, self.filter = "cpu", None
 
@@ -170,8 +172,7 @@ class Krea:
         if not (FILTER / "config.json").is_file():
             return None
         if self.filter is None:
-            from transformers import pipeline
-            self.filter = pipeline("image-classification", model=str(FILTER), device="cpu")
+            self.filter = content_filter()
         scores = {r["label"].lower(): r["score"] for r in self.filter(img.convert("RGB"))}
         return round(scores.get("nsfw", 0.0), 3)
 
@@ -235,7 +236,7 @@ def painter_numbers(name):
     if re.search(r"turbo|lightning|hyper|lcm", name, re.I):
         steps, cfg, sampler = 8, 2.0, "euler_a"
     try:
-        o = json.load(open(NUMBERS, encoding="utf-8"))
+        o = json.loads(Path(NUMBERS).read_text(encoding="utf-8"))
         steps, cfg, sampler = int(o.get("steps", steps)), float(o.get("cfg", cfg)), str(o.get("sampler", sampler))
     except (OSError, ValueError):
         pass
@@ -254,7 +255,7 @@ ASK = ("You write one prompt for an image model that paints the cover artwork of
 
 
 def take_words(d):
-    req = json.load(open(d / "request.json", encoding="utf-8")) if (d / "request.json").is_file() else {}
+    req = json.loads(Path(d / "request.json").read_text(encoding="utf-8")) if (d / "request.json").is_file() else {}
     style = " ".join(str(req.get("style") or "").split())[:1200]
     lyrics = "\n".join(l for l in str(req.get("lyrics") or "").splitlines()
                        if l.strip() and not re.match(r"^\s*\[.*\]\s*$", l))[:1500]
@@ -266,7 +267,7 @@ def subject_of(title):
     """The instrument a take is named for (probe120-duduk-a, ab-duduk-e080-a), from the cheat-sheet's list, the longest
     name first (crystal-singing-bowls before singing-bowls); None for a song."""
     try:
-        looks = json.load(open(LOOKS, encoding="utf-8"))
+        looks = json.loads(Path(LOOKS).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     t = "-" + re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-") + "-"
@@ -284,8 +285,8 @@ def write_prompt(title, style, lyrics, seed, subject):
         head = (looks + ", ") if looks else ""
         return head + "album cover artwork, " + ", ".join(style.replace(".", ",").split(",")[:8]) + ", cinematic light, painterly", "template"
     from transformers import AutoModelForCausalLM, AutoTokenizer
-    tok = AutoTokenizer.from_pretrained(PROMPTER)
-    model = AutoModelForCausalLM.from_pretrained(PROMPTER, dtype=torch.bfloat16).to("cuda")   # dtype: transformers 4.56 on and 5
+    tok = AutoTokenizer.from_pretrained(PROMPTER, local_files_only=True, trust_remote_code=False)
+    model = AutoModelForCausalLM.from_pretrained(PROMPTER, dtype=torch.bfloat16, local_files_only=True, trust_remote_code=False).to("cuda")   # dtype: transformers 4.56 on and 5
     user = f"Title: {title}\nStyle: {style}\nLyrics:\n{lyrics or '(instrumental)'}"
     if subject:
         home = subject.get("home") or ""
@@ -308,6 +309,39 @@ def write_prompt(title, style, lyrics, seed, subject):
     return text, PROMPTER.name
 
 
+def sdxl_path():
+    """A local SDXL selection without Windows symlink/admin requirements.
+
+    SDXL-Artwork-Model.json may name a model relative to artwork/ in its model
+    field. The existing link and CyberRealistic fallback remain supported.
+    """
+    try:
+        settings = json.loads(NUMBERS.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        settings = {}
+    except (OSError, ValueError) as e:
+        raise RuntimeError("Invalid artwork/SDXL-Artwork-Model.json") from e
+    name = settings.get("model") if isinstance(settings, dict) else None
+    if name:
+        name = str(name).replace("\\", "/")
+        if name.startswith("/") or ":" in name or "\x00" in name or ".." in name.split("/"):
+            raise RuntimeError("SDXL model must be a relative path inside artwork/")
+        base = (KIT / "artwork").resolve()
+        path = (base / name).resolve()
+        if not path.is_relative_to(base) or not path.exists():
+            raise RuntimeError("Selected SDXL model is not a local file/folder inside artwork/")
+        return path
+    return (LINK if LINK.exists() else OURS).resolve()
+
+
+def content_filter():
+    """Load the local filter explicitly; missing pieces never cause Hub traffic."""
+    from transformers import AutoImageProcessor, AutoModelForImageClassification, pipeline
+    model = AutoModelForImageClassification.from_pretrained(FILTER, local_files_only=True, trust_remote_code=False)
+    processor = AutoImageProcessor.from_pretrained(FILTER, local_files_only=True, trust_remote_code=False)
+    return pipeline("image-classification", model=model, image_processor=processor, device="cpu")
+
+
 def painter():
     """The painter ART_PAINTER names (HERESY 1167): Krea 2 Muse at Q4 or Q8, or the SDXL behind the link (ours without it),
     and the name it is known by. Anything not an SDXL behind the link is refused with what it is, before a minute is spent."""
@@ -321,15 +355,17 @@ def painter():
     from diffusers import StableDiffusionXLPipeline, DPMSolverMultistepScheduler
     if LINK.is_symlink() and not LINK.exists():
         raise RuntimeError(f"artwork/{LINK.name} points at nothing ({os.readlink(LINK)}): point it at an SDXL folder or .safetensors file")
-    real = (LINK if LINK.exists() else OURS).resolve()
+    real = sdxl_path()
     if real.is_dir():
         try:
-            kind = json.load(open(real / "model_index.json", encoding="utf-8")).get("_class_name", "")
+            kind = json.loads(Path(real / "model_index.json").read_text(encoding="utf-8")).get("_class_name", "")
         except (OSError, ValueError):
             raise RuntimeError(f"{real.name} is no diffusers folder (no model_index.json): an SDXL folder or one .safetensors file")
         if "StableDiffusionXL" not in kind:
             raise RuntimeError(f"{real.name} is a {kind or 'model of another kind'}, not an SDXL: only SDXL finetunes paint here")
-        pipe = StableDiffusionXLPipeline.from_pretrained(real, torch_dtype=torch.float16, use_safetensors=True)
+        variant = "fp16" if (real / "unet/diffusion_pytorch_model.fp16.safetensors").is_file() else None
+        pipe = StableDiffusionXLPipeline.from_pretrained(real, torch_dtype=torch.float16, use_safetensors=True,
+                                                       variant=variant, local_files_only=True, low_cpu_mem_usage=True, disable_mmap=False)
     elif real.suffix == ".safetensors":
         from safetensors import safe_open
         with safe_open(str(real), "pt") as f:              # SDXL carries two text encoders; SD 1.5 one, FLUX none of these
@@ -337,7 +373,9 @@ def painter():
         if not sdxl:
             raise RuntimeError(f"{real.name} is not an SDXL checkpoint (SD 1.5, SD 3, FLUX… do not paint here): only SDXL finetunes")
         cfg = str(OURS) if (OURS / "model_index.json").is_file() else None   # the parts' configs from our folder: offline
-        pipe = StableDiffusionXLPipeline.from_single_file(str(real), torch_dtype=torch.float16, config=cfg, local_files_only=bool(cfg))
+        if not cfg:
+            raise RuntimeError("An SDXL single file needs local pipeline configs in artwork/CyberRealistic-XL-v10; automatic config downloads are disabled")
+        pipe = StableDiffusionXLPipeline.from_single_file(str(real), torch_dtype=torch.float16, config=cfg, local_files_only=True, low_cpu_mem_usage=True)
     else:
         raise RuntimeError(f"artwork/{LINK.name} leads to {real.name}: neither an SDXL folder nor a .safetensors file")
     name = real.name if real.is_dir() else real.stem
@@ -384,8 +422,9 @@ def critic():
 
 
 def omni(crit, image, text, n):
-    r = subprocess.run([str(CLI), "-m", str(crit[0]), "--mmproj", str(crit[1]), "--image", str(image), "-p", text,
-                        "-ngl", "99", "-c", "8192", "-n", str(n), "--temp", "0"], capture_output=True, text=True, timeout=300)
+    r = run_process([str(CLI), "-m", str(crit[0]), "--mmproj", str(crit[1]), "--image", str(image), "-p", text,
+                        "-ngl", "99", "-c", "8192", "-n", str(n), "--temp", "0"], capture_output=True, text=True,
+                       encoding="utf-8", errors="replace", timeout=300)
     if r.returncode != 0:
         raise RuntimeError("the critic failed: " + (r.stderr.strip().splitlines() or ["no output"])[-1][-200:])
     return r.stdout.strip()
@@ -432,6 +471,7 @@ def adapt(crit, image, prompt, subject, shows):
 
 
 def main():
+    configure_runtime(KIT, artist=any(p.lower() == ".venv-art" for p in Path(sys.executable).parts))
     d, out = Path(sys.argv[1]), Path(sys.argv[2])
     seed = int(sys.argv[3]) if len(sys.argv) > 3 and sys.argv[3] else random.randrange(2 ** 31)
     import torch
