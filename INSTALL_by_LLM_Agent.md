@@ -1,3 +1,5 @@
+> Native Windows branch: use [README.md](README.md) / [windows/README_RU.md](windows/README_RU.md) and the explicit Windows scripts. `Start-Full.cmd` uses the prepared local runtime, no WSL; SDXL is removed. The Linux guide below is preserved upstream material, not instructions to install WSL or Linux packages for this branch. Large downloads, new dependencies and model tests need the person's applicable authorization; publishing source is not permission to run them.
+
 # Installing Ruach Studio · for an AI agent
 
 You are installing Ruach Studio for a person, on their Linux machine. Read `INSTALL.md` first: it is the same install for people. This file adds what an agent needs: what to check before each step, what success looks like, where to stop and ask, and what never to do.

@@ -5,6 +5,25 @@
 одна очередь запросов, контекст 8192 токена. Модель занимает 2,50 ГБ;
 ключи и платные сервисы не нужны. Лицензия модели Apache-2.0 сохранена рядом.
 
+## Новый clone: отдельная подготовка
+
+Модель, исходники llama.cpp, CPU binary и ready marker не поставляются через Git. Описание «установлено и проверено» выше относится к локальной reference installation, а не любому clone. Для нового проекта сначала подготовьте основной runtime и запустите Studio с `Start-Full.cmd -WithoutWriter`; затем, после согласования загрузок/build/короткого теста:
+
+```powershell
+powershell.exe -NoProfile -File .\windows\Install-Writer.ps1 -Stage All -PendingReservedBytes 0
+powershell.exe -NoProfile -File .\windows\Start-Writer.ps1 -NoBrowser
+```
+
+В другом окне той же папки, пока Studio и Writer работают:
+
+```powershell
+powershell.exe -NoProfile -File .\windows\Test-Writer.ps1 -StopAfter
+```
+
+Это реальный короткий text test и Chrome/CORS check, не только health; нужны Node22+/Chrome и указанные ниже ресурсы. Успешный тест пишет собственный ready marker и останавливает проверенный Writer. После штатной остановки Studio повторный обычный `Start-Full.cmd` включает verified Writer автоматически. Не копируйте чужой ready JSON и не запускайте два Writer одновременно. Если тест/ресурсы не проходят, Studio остаётся доступной без Writer.
+
+## Запуск подготовленного Writer
+
 Запуск из PowerShell:
 
 ~~~powershell

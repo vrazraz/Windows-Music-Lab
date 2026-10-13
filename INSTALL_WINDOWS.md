@@ -1,6 +1,8 @@
-﻿# Windows installation
+# Windows installation
 
-For the native Windows port, use [the Russian guide](windows/README_RU.md) or [the quick start](README.md). Build the C++/CUDA server once, then launch `Start.cmd` from the checkout. Missing pinned models are downloaded and SHA256-verified automatically on first start. Open http://localhost:41867; Ctrl+C stops the server. See the guides for requirements, separate model licenses and the verified scope.
+On the `full-windows-port` branch, follow [the current native setup](README.md) or [the Russian guide](windows/README_RU.md). Build the backend/full engine and prepare the isolated Python runtime and pinned base models explicitly, then launch **Start-Full.cmd** at **http://localhost:41868**. Optional models are not downloaded by this launcher; SDXL is removed. A fresh source clone has no local binaries, environments, models or readiness receipts.
+
+The earlier **Start.cmd** remains the minimal Windows profile at41867, with its two base models downloaded/verified on first start. It is not the full Studio bootstrap. No WSL is needed for either native profile.
 
 The following is the preserved upstream full-studio WSL guide. It is separate from the native port and was not exercised by this Windows work.
 

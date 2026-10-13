@@ -111,3 +111,31 @@
 .env
 .env.*
 !.env.example
+
+# Publication guard: future weights/environment binaries/QA outputs stay local,
+# wherever a downloader or test puts them. Existing attributed source assets stay tracked.
+*.ckpt
+*.pth
+*.pt
+*.onnx
+*.th
+*.tflite
+*.h5
+*.hdf5
+*.bin
+*.whl
+*.exe
+*.dll
+*.pyd
+*.obj
+*.lib
+*.pdb
+*.sqlite
+*.sqlite3
+*.db
+*.zip
+*.7z
+/test-results/
+/playwright-report/
+/browser-profiles/
+/qa-output/
