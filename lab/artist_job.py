@@ -16,6 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import art_job  # noqa: E402
+from platform_runtime import configure_runtime
 
 # a shape: (drawn at, kept at); Krea 2 takes multiples of 16
 SHAPES = {"1:1": ((1280, 1280), (1280, 1280)), "16:9": ((1920, 1088), (1920, 1080)), "9:16": ((1088, 1920), (1080, 1920))}
@@ -291,9 +292,12 @@ def load_loras(pipe, loras, ckpt):
 
 
 def main():
-    run = Path(sys.argv[1])
-    ask = json.load(open(run / "ask.json", encoding="utf-8"))
     asked = (os.environ.get("ART_PAINTER") or "").strip().lower()
+    if asked == "sdxl":
+        raise ValueError("SDXL has been removed from Artist; choose an available Krea or Qwen painter")
+    configure_runtime(art_job.KIT, artist=True)
+    run = Path(sys.argv[1])
+    ask = json.loads(Path(run / "ask.json").read_text(encoding="utf-8"))
     if asked == "upscale":                           # HERESY 1322: a picture made larger by an upscaler (its ask has no prompt)
         import artist_upscale
         return artist_upscale.main(run, ask)

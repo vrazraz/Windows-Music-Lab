@@ -65,7 +65,7 @@ def join(src, out, lang, speech):
         parts.sort(key=lambda p: int(re.sub(r"\D", "", p.stem) or 0))
         frames, params, texts, words0 = [], None, [], None
         for js in parts:
-            words = json.load(open(js, encoding="utf-8"))
+            words = json.loads(js.read_text(encoding="utf-8"))
             words0 = words0 or words
             t = lyrics(words)
             if t.strip():
@@ -118,7 +118,7 @@ def main():
         if group == "Paired_Speech_Group" and not a.speech:
             skipped += 1
             continue
-        words = json.load(open(js, encoding="utf-8"))
+        words = json.loads(js.read_text(encoding="utf-8"))
         text = lyrics(words)
         if not text.strip():
             skipped += 1

@@ -57,11 +57,13 @@
       .then(function (r) { return r.json().then(function (d) { if (!r.ok) throw new Error(d.error || "HTTP " + r.status); return d; }); });
   }
   function seen() { var v = $("view-engine"); return !!(v && !v.classList.contains("is-hidden")); }
-  function job() { return (S.data && S.data.job) || null; }
+  function local() { return !!(S.data && S.data.mode === "local"); }
+  function fetchEnabled() { return !!(S.data && !local() && S.data.script && S.data.download_enabled !== false); }
+  function job() { return local() ? null : (S.data && S.data.job) || null; }
   function running() { var j = job(); return !!(j && j.status === "running"); }
   function parts() { return (S.data && S.data.last && S.data.last.parts) || []; }
   // HERESY 1296: «differs» is a copy of one's own, kept (the Forge's voices: the published tensors, their readers' names still in the header)
-  function whole(p) { return p.rows.every(function (r) { return r.state === "here" || r.state === "fetched" || r.state === "differs"; }); }
+  function whole(p) { return p.rows.every(function (r) { return r.state === "here" || (!local() && (r.state === "fetched" || r.state === "differs")); }); }
 
   function load() {
     clearTimeout(S.timer);
@@ -71,7 +73,7 @@
   }
   // a run's end, seen once: what came, the LoRA list asked again, and the restart said where the engine needs one
   function take(d) {
-    var j = d.job, was = S.was;
+    var j = d.mode === "local" ? null : d.job, was = S.was;
     S.data = d;
     S.was = j ? j.status + ":" + j.started : "";
     if (j && j.status !== "running" && was === "running:" + j.started && j.kind === "fetch") {
@@ -94,26 +96,31 @@
     paintLine(d);
     $("wtParts").innerHTML = parts().map(function (p) {
       var bad = p.rows.filter(function (r) { return r.state !== "here"; }), ok = whole(p);
-      var here = p.rows.length - bad.length, own = p.rows.filter(function (r) { return r.state === "differs"; }).length;
-      var sum = (ok ? tr("all here") : tr("{0} here, {1} not").replace("{0}", here).replace("{1}", bad.filter(function (r) { return r.state !== "fetched" && r.state !== "differs"; }).length)) +
+      var here = p.rows.length - bad.length, own = local() ? 0 : p.rows.filter(function (r) { return r.state === "differs"; }).length;
+      var sum = (ok ? tr(local() ? "all expected sizes match" : "all here") : tr("{0} here, {1} not").replace("{0}", here).replace("{1}", bad.filter(function (r) { return r.state !== "fetched" && r.state !== "differs"; }).length)) +
         (own ? " · " + tr("own copies kept: " + own) : "");
       var now = going({ part: p.part });             // HERESY 1302: its fetch under way, here
       return '<div class="wt-part' + (ok ? " is-whole" : "") + (now ? " is-going" : "") + '" data-part="' + esc(p.part) + '">' +
         '<div class="wt-head"><b>' + esc(tr(p.label)) + '</b><span class="wt-size">' + esc(p.size) + '</span><span class="wt-sum">' + esc(sum) + "</span>" +
-        (ok && !now ? "" : '<button type="button" class="btn ghost small" data-wt-part="' + esc(p.part) + '"' + (busy ? " disabled" : "") + ">" + esc(tr(now ? "Fetching…" : "Fetch")) + "</button>") + "</div>" +
+        (!fetchEnabled() || (ok && !now) ? "" : '<button type="button" class="btn ghost small" data-wt-part="' + esc(p.part) + '"' + (busy ? " disabled" : "") + ">" + esc(tr(now ? "Fetching…" : "Fetch")) + "</button>") + "</div>" +
         (now ? progress() : "") +
-        (bad.length ? '<ul class="wt-rows">' + bad.map(function (r) {
-          return '<li class="wt-row"><span class="wt-st is-' + esc(r.state) + '">' + esc(tr(r.state)) + '</span><code translate="no">' + esc(r.text) + "</code></li>";
+        ((local() ? p.rows : bad).length ? '<ul class="wt-rows">' + (local() ? p.rows : bad).map(function (r) {
+          return '<li class="wt-row"><span class="wt-st is-' + esc(r.state) + '">' + esc(tr(local() && r.state === "here" ? "size matches" : r.state)) + '</span><code translate="no">' + esc(r.text) + "</code></li>";
         }).join("") + "</ul>" : "") + "</div>";
     }).join("");
     var all = $("wtFetch");
-    all.hidden = !d.script || (!!d.last && parts().every(whole) && !going({ part: "missing" }));
-    all.disabled = busy;
+    all.hidden = !fetchEnabled() || (!!d.last && parts().every(whole) && !going({ part: "missing" }));
+    all.disabled = busy || !fetchEnabled();
     all.textContent = tr(going({ part: "missing" }) ? "Fetching…" : "Fetch what is missing");   // HERESY 1302
     var top = $("wtProg");                           // HERESY 1302: «what is missing» has no one row: under the card's line
     if (top) { top.hidden = !going({ part: "missing" }); top.innerHTML = top.hidden ? "" : progress(); }
-    $("wtCheck").disabled = busy || !d.script;
+    $("wtCheck").disabled = busy || (!local() && !d.script);
+    $("wtCheck").textContent = tr(local() ? "Check local files" : "Check again");
     $("wtExtras").innerHTML = (d.extras || []).map(function (e) {
+      if (local()) {
+        return '<div class="wt-extra" data-extra="' + esc(e.name) + '"><div class="wt-x-name"><b>' + esc(tr(e.label)) + '</b><span>' + esc(tr(e.what)) + '</span></div><ul>' +
+          e.variants.map(function (v) { return '<li>' + esc(v.label || v.id) + ' — ' + esc(v.size) + ' — ' + esc(tr(v.here ? "files present; not validated" : "not installed")) + '</li>'; }).join("") + '</ul></div>';
+      }
       var pick = S.pick[e.name] || (going({ extra: e.name }) && job().which.variant) || (e.variants.filter(function (v) { return !v.here; })[0] || e.variants[0]).id;
       var v = e.variants.filter(function (x) { return x.id === pick; })[0] || e.variants[0];
       return '<div class="wt-extra" data-extra="' + esc(e.name) + '"><div class="wt-x-name"><b>' + esc(tr(e.label)) + "</b><span>" + esc(tr(e.what)) + "</span></div>" +
@@ -126,11 +133,16 @@
     }).join("");
     paintLog(job());
     var j = job();
-    $("wtRestart").hidden = !(j && j.status !== "running" && j.restart);
+    $("wtRestart").hidden = local() || !(j && j.status !== "running" && j.restart);
   }
   function paintLine(d) {
     var el = $("wtLine"), j = d.job, txt, cls = "";
-    if (!d.script) txt = tr("This tree has no heresy/fetch-heresy.sh: nothing to check or fetch from here.");
+    if (d.mode === "local") {
+      var counts = (d.last && d.last.counts) || {};
+      txt = tr("Local files: {0} sizes match, {1} missing, {2} differ.").replace("{0}", counts.here || 0).replace("{1}", counts.missing || 0).replace("{2}", counts.differs || 0) + " " +
+        tr("Only presence and size were checked; SHA256 was not validated. Downloads are disabled.") + (d.notice ? " " + tr(d.notice) : "");
+      cls = counts.differs || (d.metadata_errors || []).length ? "is-bad" : "";
+    } else if (!d.script) txt = tr("This tree has no heresy/fetch-heresy.sh: nothing to check or fetch from here.");
     else if (j && j.status === "running") {
       var phase = j.kind === "check" ? tr("checking") : j.checking ? tr("checking what is here after it") : tr("fetching");
       txt = cap(tr(j.what)) + ": " + phase + "… " + dur(d.now - j.started) +
@@ -161,6 +173,7 @@
   }
 
   function start(body, ask, ok) {
+    if (!fetchEnabled()) { toast(tr("Model downloads are disabled; install additional models only with reviewed operator instructions.")); return Promise.resolve(); }
     if (running()) return;
     return window.HeresyDialog.confirm(ask, { ok: ok || tr("Fetch") }).then(function (yes) {
       if (!yes) return;

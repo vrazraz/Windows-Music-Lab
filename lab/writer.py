@@ -10,6 +10,7 @@ KIT/writer/.trash/ and nothing is deleted here.
 """
 import json, os, re, shutil, threading, time, uuid
 from pathlib import Path
+from library_io import read_json, write_json, valid_component, manifest_file
 
 LOCK = threading.Lock()
 KEEP = 100
@@ -21,35 +22,34 @@ def _dir(kit, scope=""):
     """KIT/writer, or KIT/writer-SCOPE for a test page (?scope=NAME), as the settings do"""
     scope = re.sub(r"[^a-z0-9_-]", "", (scope or "").lower())[:20]
     d = kit / (f"writer-{scope}" if scope else "writer")
-    d.mkdir(exist_ok=True)
+    d.mkdir(parents=True, exist_ok=True)
     return d
 
 
 def _path(d, did):
-    if not re.fullmatch(r"[0-9a-f]{12}", did or ""):
+    if not isinstance(did, str) or not re.fullmatch(r"[0-9a-f]{12}", did):
         raise ValueError("bad document id")
-    return d / f"{did}.json"
+    return manifest_file(d, f"{did}.json")
 
 
 def _read(d, did):
     p = _path(d, did)
     if not p.is_file():
         raise FileNotFoundError("no such document")
-    return json.load(open(p, encoding="utf-8"))
+    return read_json(p)
 
 
 def _write(d, doc):
     p = _path(d, doc["id"])
-    tmp = Path(str(p) + ".part")
-    json.dump(doc, open(tmp, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
-    os.replace(tmp, p)
+    write_json(p, doc)
 
 
 def listing(kit, scope=""):
     out = []
     for p in sorted(_dir(kit, scope).glob("*.json")):
         try:
-            d = json.load(open(p, encoding="utf-8"))
+            p = manifest_file(_dir(kit, scope), p.name)
+            d = read_json(p)
         except ValueError:
             continue
         lyr = (d.get("lyrics") or "").strip().split("\n")
@@ -102,7 +102,7 @@ def post(kit, data, scope=""):
             return doc
         if op == "link":                                  # takes made from the document
             doc = _read(wd, data.get("id"))
-            names = [n for n in data.get("takes") or [] if isinstance(n, str) and "/" not in n]
+            names = [n for n in data.get("takes") or [] if valid_component(n)]
             doc["takes"] = sorted(set(doc.get("takes") or []) | set(names))
             _write(wd, doc)
             return doc
@@ -113,6 +113,7 @@ def post(kit, data, scope=""):
                 raise ValueError("no such version")
             v = doc["versions"][i]
             doc["versions"].append({"at": doc.get("updated"), "label": "before restoring a version", **{f: doc.get(f) for f in FIELDS}})
+            doc["versions"] = doc["versions"][-KEEP:]
             doc.update({f: v.get(f) for f in FIELDS})
             doc["updated"] = time.time()
             _write(wd, doc)
@@ -125,8 +126,10 @@ def post(kit, data, scope=""):
         if op == "delete":                                # into writer/.trash, never deleted here
             p = _path(wd, data.get("id"))
             if p.is_file():
-                t = wd / ".trash"
+                t = manifest_file(wd, ".trash")
                 t.mkdir(exist_ok=True)
+                if (t / p.name).exists():
+                    raise ValueError("a document with this id is already in the trash")
                 shutil.move(str(p), str(t / p.name))
             return listing(kit, scope)
     raise ValueError("put, snapshot, link, restore, delete, export or import")
@@ -143,7 +146,7 @@ def _all(d):
     out = []
     for p in sorted(d.glob("*.json")) if d.is_dir() else []:
         try:
-            out.append(json.load(open(p, encoding="utf-8")))
+            out.append(read_json(manifest_file(d, p.name)))
         except ValueError:
             continue
     return out
@@ -152,7 +155,7 @@ def _all(d):
 def _clean(doc):
     """a document of a backup, its fields of the right kinds (a hand-edited file may not have them)"""
     out = {"id": doc["id"], "created": float(doc.get("created") or time.time()), "updated": float(doc.get("updated") or time.time()),
-           "takes": [n for n in doc.get("takes") or [] if isinstance(n, str) and "/" not in n],
+           "takes": [n for n in doc.get("takes") or [] if valid_component(n)],
            "versions": [v for v in doc.get("versions") or [] if isinstance(v, dict)][-KEEP:]}
     for f in FIELDS:
         v = doc.get(f)
@@ -162,19 +165,23 @@ def _clean(doc):
 
 
 def _import(kit, wd, backup, scope=""):
-    if not isinstance(backup, dict) or backup.get("kind") != BACKUP_KIND or not isinstance(backup.get("docs"), list):
+    if not isinstance(backup, dict) or backup.get("kind") != BACKUP_KIND or not isinstance(backup.get("docs"), list) or not isinstance(backup.get("trash", []), list):
         raise ValueError("not a Writer backup (a file this room exported)")
     told = {"added": 0, "same": 0, "copies": 0, "trashed": 0, "skipped": 0}
-    trash = wd / ".trash"
+    trash = manifest_file(wd, ".trash")
     for doc, into in [(d, wd) for d in backup["docs"]] + [(d, trash) for d in backup.get("trash") or []]:
-        if not isinstance(doc, dict) or not re.fullmatch(r"[0-9a-f]{12}", str(doc.get("id", ""))):
+        if not isinstance(doc, dict) or not isinstance(doc.get("id"), str) or not re.fullmatch(r"[0-9a-f]{12}", doc["id"]):
             told["skipped"] += 1
             continue
-        doc = _clean(doc)
+        try:
+            doc = _clean(doc)
+        except (TypeError, ValueError, OverflowError):
+            told["skipped"] += 1
+            continue
         here = next((d / f"{doc['id']}.json" for d in (wd, trash) if (d / f"{doc['id']}.json").is_file()), None)
         if here is not None:
             try:
-                mine = json.load(open(here, encoding="utf-8"))
+                mine = read_json(here)
             except ValueError:
                 mine = {}
             if all(mine.get(f) == doc[f] for f in FIELDS) and len(mine.get("versions") or []) >= len(doc["versions"]):
@@ -186,7 +193,5 @@ def _import(kit, wd, backup, scope=""):
         else:
             told["trashed" if into is trash else "added"] += 1
         into.mkdir(exist_ok=True)
-        tmp = into / f"{doc['id']}.json.part"
-        json.dump(doc, open(tmp, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
-        os.replace(tmp, into / f"{doc['id']}.json")
+        write_json(into / f"{doc['id']}.json", doc)
     return dict(listing(kit, scope), imported=told)

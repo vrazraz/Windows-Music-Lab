@@ -322,7 +322,7 @@ A sampler of two or three passes a step costs two or three times Euler's time at
 
 ### Adapters
 
-**LoRA** under the painter: the adapters of its family (Krea 2, Qwen-Image 2.1, Qwen-Image 2512, SDXL), up to four, each at its strength (0 to 1.5); a click on one of its trigger words puts it into the prompt. **Add…** opens the library: the folders on the left, the cards with their pictures, a search. The adapters live in the studio's `artwork/loras/<family>/` (`krea2`, `qwen-image-2.1`, `qwen-image-2512`, `sdxl`): any folders inside become groups, and a picture beside a file with its name (`NAME.jpg`, `NAME.png`, `NAME.preview.png`) shows on its card. Get them from Civitai by their base model (Krea 2, Qwen, SDXL 1.0) and put the `.safetensors` there; **Look up on Civitai** sends each file's SHA-256 and nothing else, and keeps the answer beside it (`NAME.civitai.info`: its name, base model and trigger words, and its first picture rated safe when it has none). What ComfyUI's LoRA Manager or Stability Matrix wrote beside a file is read as well. An adapter made for another model, which would reach none of the painter's layers, stops the run and says so.
+**LoRA** under the painter: the adapters of its family (Krea 2, Qwen-Image 2.1, Qwen-Image 2512), up to four, each at its strength (0 to 1.5); a click on one of its trigger words puts it into the prompt. **Add…** opens the library: the folders on the left, the cards with their pictures, a search. The adapters live in the studio's `artwork/loras/<family>/` (`krea2`, `qwen-image-2.1`, `qwen-image-2512`): any folders inside become groups, and a picture beside a file with its name (`NAME.jpg`, `NAME.png`, `NAME.preview.png`) shows on its card. Get them from Civitai by their base model (Krea 2, Qwen) and put the `.safetensors` there; **Look up on Civitai** sends each file's SHA-256 and nothing else, and keeps the answer beside it (`NAME.civitai.info`: its name, base model and trigger words, and its first picture rated safe when it has none). What ComfyUI's LoRA Manager or Stability Matrix wrote beside a file is read as well. An adapter made for another model, which would reach none of the painter's layers, stops the run and says so.
 
 **Together**: from two adapters, a bar under them gives their strengths' sum on the Creator's road: green to 1.2, amber to 1.8, red past it. Stacked adapters add up, and past about 1.8 a picture burns (its colours and edges overdone) however modest each one is; the zones are a first measure for pictures, to be set by eye. Drag the bar to move them all at once, each in proportion to where it stood.
 
@@ -350,7 +350,7 @@ A click on a picture puts it on the stage with its run under it; a click on the 
 
 A square picture has **Set as cover**: it becomes the cover of the take in hand (pick one on the right), in its card, in the player and in its MP3. The cover it had is kept beside the take (`artwork-removed/`), as a redraw keeps it, and the other letter of an A/B pair gets the new one too when it has none.
 
-**A take's own artwork** (*Draw artwork* in its menu, in the Librarian, for one take or many) is painted by the painter in **Engine → Artwork**: by the cards (Krea 2 Muse Q4 from 16 GB, else SDXL), or the one you choose: Krea 2 Muse Q4 or Q8, SDXL CyberRealistic, and the Qwen painters this machine has: Qwen-Image 2512 Q4 or Q6 and each fp8 fine-tune with Lightning, Qwen-Image 2.1 with its licence said (not for a song that is sold). A fine-tune chosen that is no longer here gives way to the cards' choice, and the artwork says who painted it.
+**Artwork:** Generation uses only installed, viable Krea/Qwen painters. With no available painter the UI says so; gallery, uploaded images and other Artist tools remain. No new model is downloaded automatically.
 
 ### The Artist's Trash
 
@@ -391,7 +391,7 @@ The title and the artist's name written on the cover; a canvas with layers, as I
 
 **Regenerate with a new seed** (above the Writer in the take's menu): the take made again from everything it was made with, but new seeds; the new one takes the old one's workspaces and note, and the old one waits in the section *Sourced for Regeneration* of its workspace (its workspace does not show it among its own) until you empty it; the new one keeps its note, like, star and picture. A probe comes out its full two minutes. Play, open in the Creator or in the Refiner, the sheet (its score), the datasheet (all it was made with: the style and the lyrics, the score drawn, every knob, the LoRAs and sliders with their strengths; a Direct take has no score, and *Write it from the sound* asks the transcriber for one), like, dislike, favourite, a note, rename, **workspaces** (one take can sit in several), **move to** one workspace (on a checked card: every checked take, out of the workspace open), hide, send to the Writer, copy, download, **export to DAW** (REAPER project or DAWproject, on any take: with its stems once the Refiner has split them), the trash. **On a checked card, with others checked**, the menu acts on all of them, and its head says how many: like, dislike, favourite, artwork, the artwork taken off, workspaces, hide, a ZIP; drawing artwork for several and regenerating several ask first, as they cost a card's minutes.
 
-**Draw artwork**: a small language model (Qwen3-4B) reads the take's style and words and writes one picture prompt; Krea 2 Muse paints it, 1024 px, in about half a minute on a 16 GB card (on a smaller card SDXL, CyberRealistic XL; *Engine → Artwork* picks the painter). It shows in the player, on the card, in the desktop's media panel, and inside the MP3 you download (as its front cover). Once a take has its picture, the menu says *Open the artwork* (over the page, as a click on the card's picture or on the player's square) and *Redraw artwork* (a new prompt and a new picture; the old one is kept beside the take, in `artwork-removed/`). The two models come with `heresy/fetch-heresy.sh --artwork` (14 GB, asked first). *Engine → Artwork* offers the Qwen painters here too: Qwen-Image 2512 and its fp8 fine-tunes with Lightning, and Qwen-Image 2.1 (see Artist › A Cover for the Take).
+**Artwork:** Generation uses only installed, viable Krea/Qwen painters. With no available painter the UI says so; gallery, uploaded images and other Artist tools remain. No new model is downloaded automatically.
 
 ### The Instruments under the Style
 
@@ -399,17 +399,9 @@ Under the Style box, the studio names what your prompt asks for: a chip for each
 
 ### Artwork: What Draws It, What It Cannot, Another Painter
 
-**What draws it.** A small language model (Qwen3-4B) reads the take's style and words and writes one picture prompt, its subject first; Krea 2 Muse paints it (1024 px), or SDXL where Krea does not fit (*Engine → Artwork*). When the take is named for an instrument (an instrument's probe), the studio tells both how the instrument looks and where it is at home, and Omni (the listener's model) looks at the picture: when it does not find the instrument, it writes the prompt again from what it saw, and the painter tries once more, three pictures at most. About half a minute a picture on a 16 GB card. A Qwen painter chosen there paints with Lightning: at 1328 px, kept at 1024.
+**Artwork:** Generation uses only installed, viable Krea/Qwen painters. With no available painter the UI says so; gallery, uploaded images and other Artist tools remain. No new model is downloaded automatically.
 
 **What it cannot** (a disclaimer, said plainly): the painter draws what it knows. An instrument it has never seen by name (the duduk, the morin khuur, the khomus, crystal singing bowls…) comes out as a guess: a wooden pipe, a violin, kitchen bowls. Where Omni found the instrument in none of the three pictures, the picture is marked **≈ a guess**, in the overlay and in the instruments' cheat-sheet. An artwork is the take's mood, not a reference picture of an instrument: to know how an instrument looks, look it up.
-
-**Pro tip: another painter.** When the painter is SDXL (chosen in *Engine → Artwork*, or on a card under 16 GB), it is whatever SDXL the link `artwork/SDXL-Artwork-Model` points at; ours is `CyberRealistic-XL-v10`. Put another SDXL finetune beside it, as a diffusers folder or as one `.safetensors` file (as Civitai gives them), and point the link at it, relative:
-
-```bash
-cd artwork && ln -sfn MyFavourite-XL.safetensors SDXL-Artwork-Model
-```
-
-and back: `ln -sfn CyberRealistic-XL-v10 SDXL-Artwork-Model`. The next picture uses it, no restart. **Only SDXL finetunes work**: SD 1.5, SD 3, FLUX and other families are refused, and the studio says what it found instead. A Turbo, Lightning, Hyper or LCM finetune wants a few steps and little guidance: when its name says so, the studio paints it with 8 steps, guidance 2 and Euler ancestral. For any painter, a file beside the link sets its numbers: `artwork/SDXL-Artwork-Model.json` with `{"steps": 6, "cfg": 1.5, "sampler": "euler_a"}` (or `"dpmpp"`, the studio's own).
 
 ## LoRA Trainer
 
@@ -564,14 +556,7 @@ On a machine with several cards, give each its work: the **studio** (synthesis) 
 
 ### Decoders, Adapters, Sliders, the Writer's Model, the Look
 
-- **VAEs**, **LoRAs**, **Sliders**: every file the studio found, with its source and what it does.
-- **Models and LoRAs**: what the install brings, part by part (the extra decoders and the sliders, Whisper, the stems' models, UniverSR, the LoRAs), as its last run found it, and **Check again** to look anew. A part not whole lists what is missing and has its **Fetch**; **Fetch what is missing** takes them all; a download cut short goes on where it stopped. **More models**: another backbone (BF16 beside Q8_0), the style listener, the Artist's painter, the trainer's base, each with its variants and sizes, a variant here said so, each asked first with its size. A new backbone, decoder or slider reaches the engine at its next start (**Restart the engine**); new LoRAs at once.
-- **Artwork**: who paints a take's artwork: by the cards (Krea 2 Muse Q4 from 16 GB, else SDXL), or one chosen: Krea 2 Muse Q4 or Q8, SDXL CyberRealistic, and the Qwen painters this machine has (Qwen-Image 2512 Q4 or Q6 and each fp8 fine-tune, with Lightning; Qwen-Image 2.1 with its licence said).
-- **Writer**: the local chat server's address (vLLM, LM Studio, Ollama), *Test connection*.
-- **Appearance**: 22 themes (chosen to work in: clear and quiet), corners, the three fonts (text, headings, numbers).
-- **Server log**: the whole log; **About**: every project the studio stands on, linked.
-- **Updates**: Ruach Studio's releases on GitHub against this version: how often to look (every day, week, month, never), release candidates too, and when one is out, ask or update by itself when nothing runs (only where the studio is a clone of its repository; elsewhere it says how to update by hand). A new studio, and each update, offers the 💎 sets it does not have yet.
-- **Folders**: where your work lives (the songs with the workspaces fetched from Hugging Face, the trash, the Artist's pictures, the Writer's documents), what each holds and the room left on its disk. **Move…** takes one to any folder or disk: the studio first says what it will do (on the same disk a rename; on another a copy, checked file by file, then the link switched) and moves only on a second yes, while nothing renders; the old copy stays, renamed, until you remove it. **Back home** brings a folder into the studio's folder again; **Link again** points the studio at a folder whose disk came back. The models, the LoRAs and the training sets keep their places.
+- **Artwork**: Generation uses only installed, viable Krea/Qwen painters. With no available painter the UI says so; gallery, uploaded images and other Artist tools remain. No new model is downloaded automatically.
 
 ## DAW
 

@@ -14,8 +14,11 @@ runs. Anywhere else (a development tree, a copy without git) the answer says why
     GET  /update/log                   the running update's words"""
 import json, re, subprocess, time, urllib.request
 from pathlib import Path
+import platform_runtime as runtime
 
-REPO = "igrbible/Ruach_Studio"
+REPO = "vrazraz/Windows-Music-Lab"
+UPSTREAM_REPO = "igrbible/Ruach_Studio"
+MANUAL = "Automatic updating is disabled for the Windows fork. Stop the launcher, preserve models/outputs/user and review your local branch before updating manually from https://github.com/vrazraz/Windows-Music-Lab (git fetch origin, inspect the incoming commits, then merge reviewed changes); never apply igrbible upstream over this fork."
 API = "https://api.github.com/repos/" + REPO + "/releases?per_page=30"
 UNIT = "ruach-update"
 
@@ -40,7 +43,8 @@ def _state_file(config_dir):
 
 def _load(config_dir):
     try:
-        return json.loads(_state_file(config_dir).read_text(encoding="utf-8"))
+        value = json.loads(_state_file(config_dir).read_text(encoding="utf-8-sig"))
+        return value if isinstance(value, dict) else {}
     except (OSError, ValueError):
         return {}
 
@@ -53,12 +57,16 @@ def _save(config_dir, state):
 
 
 def _git(root, *args):
+    if runtime.WINDOWS or runtime.local_only():
+        return 126, "", MANUAL
     r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, timeout=30)
     return r.returncode, r.stdout.strip(), r.stderr.strip()
 
 
 def can_run(root):
     """(True, "") where an update can run; else (False, why), said as it is."""
+    if runtime.WINDOWS or runtime.local_only():
+        return False, MANUAL
     root = Path(root)
     if not (root / ".git").exists():
         return False, "this studio is not a git clone: update it by hand (download the new release, keep models/, outputs/ and user/)"
@@ -75,10 +83,15 @@ def can_run(root):
 
 def check(root, config_dir, rc=None):
     """Ask GitHub; keep and return the answer. rc None: candidates count when this is one (2.0.0-rc2 sees rc3)."""
+    if runtime.WINDOWS or runtime.local_only():
+        result = status(root, config_dir)
+        result["check_performed"] = False
+        return result
+    runtime.require_network("fork release lookup")
     here = current(root)
     state = _load(config_dir)
     want_rc = bool(rc) if rc is not None else (version_key(here) or (0, 0, 0, 1, 0))[3] == 0
-    req = urllib.request.Request(API, headers={"Accept": "application/vnd.github+json", "User-Agent": "Ruach-Studio"})
+    req = urllib.request.Request(API, headers={"Accept": "application/vnd.github+json", "User-Agent": "Windows-Music-Lab"})
     try:
         with urllib.request.urlopen(req, timeout=20) as r:
             rels = json.loads(r.read().decode("utf-8"))
@@ -93,13 +106,19 @@ def check(root, config_dir, rc=None):
         latest = {"tag": best["tag_name"], "version": best["tag_name"].lstrip("v"), "name": best.get("name") or best["tag_name"],
                   "notes": (best.get("body") or "")[:20000], "url": best.get("html_url") or "", "published": best.get("published_at") or "",
                   "candidate": bool(best.get("prerelease")) or version_key(best["tag_name"])[3] == 0}
-    state.update({"checked": int(time.time()), "error": "", "latest": latest, "rc": want_rc})
+    state.update({"repo":REPO, "checked": int(time.time()), "error": "", "latest": latest, "rc": want_rc})
     _save(config_dir, state)
     return status(root, config_dir)
 
 
 def status(root, config_dir):
     here, state = current(root), _load(config_dir)
+    if runtime.WINDOWS or runtime.local_only():
+        cached = state.get("latest") if state.get("repo") == REPO and isinstance(state.get("latest"), dict) else None
+        return {"current":here, "latest":cached, "newer":False, "checked":state.get("checked",0) if cached else 0,
+                "error":"", "rc":state.get("rc"), "can_run":False, "why":MANUAL, "running":False,
+                "repo":REPO, "mode":"local", "lookup_disabled":True, "check_performed":False,
+                "cached_only":bool(cached), "upstream_cache_ignored":bool(state.get("latest") and not cached)}
     latest = state.get("latest")
     newer = bool(latest and version_key(latest["tag"]) and version_key(here) and version_key(latest["tag"]) > version_key(here))
     ok, why = can_run(root)
@@ -110,6 +129,9 @@ def status(root, config_dir):
 
 def run(root, config_dir, tag, busy):
     """Start the update in a unit of its own (it outlives the lab's restart): (status, answer)."""
+    if runtime.WINDOWS or runtime.local_only():
+        return 409, {"error":MANUAL, "status":"disabled", "repo":REPO}
+    runtime.require_network("fork update")
     root = Path(root)
     st = status(root, config_dir)
     if busy:

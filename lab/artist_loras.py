@@ -3,7 +3,7 @@ artwork/loras/<семейство>/»; «предусмотри скан под�
 представление. И прикрути сканирование Civitai по хешу с подтяжкой инфы по адаптеру, если он там есть. Такое в LoRA Manager в
 ComfyUI заточено»; «Адаптеры пользователи пусть себе тянут по твоему Гайду прямо в комнате»).
 
-KIT/artwork/loras/FAMILY/… holds the adapters, each family a painter's: krea2 (Krea 2 Muse), sdxl, qwen-image-2.1, qwen-image-2512;
+KIT/artwork/loras/FAMILY/… holds the adapters, each family a painter's: krea2 (Krea 2 Muse), qwen-image-2.1, qwen-image-2512;
 any depth of folders below it, a folder a group. Beside an adapter: its picture (NAME.preview.png, .jpg…, or NAME.png, .jpeg…),
 and what other tools wrote of it: NAME.metadata.json (ComfyUI's LoRA Manager), NAME.civitai.info (Civitai Helper),
 NAME.cm-info.json (Stability Matrix). A look-up on Civitai sends the file's SHA-256 alone and keeps the answer as
@@ -16,9 +16,11 @@ reaches none of its layers (measured: 2 of Viktor's 9 Krea 2 adapters)."""
 import hashlib, json, os, re, struct, time, urllib.error, urllib.request
 from pathlib import Path
 
-FAMILIES = {"krea2": ("krea2-q4", "krea2-q8"), "sdxl": ("sdxl",), "qwen-image-2.1": ("qwen21",),
+from platform_runtime import require_network
+
+FAMILIES = {"krea2": ("krea2-q4", "krea2-q8"), "qwen-image-2.1": ("qwen21",),
             "qwen-image-2512": ("qwen2512-q4", "qwen2512-q6", "qwen2512-fp8")}
-TITLES = {"krea2": "Krea 2", "sdxl": "SDXL", "qwen-image-2.1": "Qwen-Image 2.1", "qwen-image-2512": "Qwen-Image 2512"}
+TITLES = {"krea2": "Krea 2", "qwen-image-2.1": "Qwen-Image 2.1", "qwen-image-2512": "Qwen-Image 2512"}
 PICS = (".preview.png", ".preview.jpeg", ".preview.jpg", ".preview.webp", ".jpg", ".jpeg", ".png", ".webp")
 TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
 CIVITAI = "https://civitai.com/api/v1/model-versions/by-hash/"
@@ -39,7 +41,9 @@ def root(kit):
 
 def _safe_id(lid):
     """An adapter's id is its path under artwork/loras/, never out of it."""
-    lid = str(lid or "").replace("\\", "/").strip("/")
+    lid = str(lid or "").replace("\\", "/")
+    if lid.startswith("/") or ":" in lid or "\x00" in lid:
+        raise ValueError("adapter ids must be relative paths inside artwork/loras/")
     if not lid or ".." in lid.split("/") or not lid.endswith(".safetensors") or lid.split("/")[0] not in FAMILIES:
         raise ValueError(f"no such adapter: {lid}")
     return lid
@@ -47,6 +51,8 @@ def _safe_id(lid):
 
 def path_of(kit, lid):
     p = root(kit) / _safe_id(lid)
+    if not p.resolve().is_relative_to(root(kit).resolve()):
+        raise ValueError("adapter path escapes artwork/loras/")
     if not p.is_file():
         raise FileNotFoundError(f"no such adapter: {lid}")
     return p
@@ -190,6 +196,7 @@ def _get(url, timeout=20):
 def civitai(kit, lid, cache):
     """An adapter looked up on Civitai by its SHA-256: the answer kept beside it (NAME.civitai.info), its first picture rated
     safe kept as its preview when it has none; «not there» remembered in the cache. Returns its entry again."""
+    require_network("Civitai adapter lookup")
     p = path_of(kit, lid)
     h = sha256(p, cache, lid)
     try:

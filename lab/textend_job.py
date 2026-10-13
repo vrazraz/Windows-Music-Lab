@@ -6,6 +6,10 @@ many were heard in order, the frames to keep (+1.5 s), the take's length.
 
     textend_job.py TAKE_DIR DEVICE        DEVICE: cuda or cpu
 """
+from pathlib import Path as _RuntimePath
+from platform_runtime import configure_runtime as _configure_runtime
+_configure_runtime(_RuntimePath(__file__).resolve().parent.parent)
+
 import json, re, sys, unicodedata, difflib
 import soundfile as sf, torch, torchaudio
 from faster_whisper import WhisperModel
@@ -69,8 +73,11 @@ def end_of_text(model, take, lyrics):
 
 if __name__ == "__main__":
     take, device = Path(sys.argv[1]), sys.argv[2]
-    model = WhisperModel(str(K / "whisper" / "whisper-large-v3-ct2-float16"), device=device,
-                         compute_type="float16" if device == "cuda" else "int8", cpu_threads=10)
+    model_dir = K / "whisper/whisper-large-v3-ct2-float16"
+    if not model_dir.is_dir():
+        raise SystemExit("the local Whisper model folder is missing; install approved weights first")
+    model = WhisperModel(str(model_dir), device=device,
+                         compute_type="float16" if device == "cuda" else "int8", cpu_threads=10, local_files_only=True)
     req = json.load(open(take / "request.json", encoding="utf-8"))
     toks = [t for t in (req.get("semantic_tokens") or "").split(",") if t.strip()]
     last, found, total, secs = end_of_text(model, take, req.get("lyrics") or "")

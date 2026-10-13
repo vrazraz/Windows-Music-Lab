@@ -22,14 +22,15 @@ an overlap and joined by equal-power crossfades; each variant is one noise seed.
     peak the result may reach, in dBTP, the remaster's own; a louder top is met by turning the whole file down. Prints one
     line of JSON.
 """
+from pathlib import Path as _RuntimePath
+from platform_runtime import configure_runtime as _configure_runtime
+_configure_runtime(_RuntimePath(__file__).resolve().parent.parent)
+
 import json, math, os, sys, time
 from pathlib import Path
 
-import numpy as np
-import soundfile as sf
-import torch
-import torchaudio
 
+KIT = Path(__file__).resolve().parent.parent
 audio, outdir, mode = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
 seeds = [int(s) for s in sys.argv[4].split(",") if s.strip()]
 keep_low = (sys.argv[5] if len(sys.argv) > 5 else "keep") == "keep"
@@ -38,6 +39,14 @@ INPUT = {"subtle": 24000, "normal": 16000, "high": 12000, "extreme": 8000}[mode]
 CUT = INPUT / 2                      # what lies above is drawn anew
 CHUNK, OVERLAP = 20.0, 1.0           # seconds; 20 s keeps the peak near 10 GB on a 3090
 
+snapshot = Path(os.environ.get("LAB_UNIVERSR_DIR", KIT / "checkpoints/universr-audio"))
+if not all((snapshot / name).is_file() for name in ("config.yaml", "pytorch_model.bin")):
+    raise SystemExit("local UniverSR weights/config are missing; install approved files in checkpoints/universr-audio or set LAB_UNIVERSR_DIR")
+
+import numpy as np
+import soundfile as sf
+import torch
+import torchaudio
 from universr import UniverSR  # noqa: E402
 
 t0 = time.time()
@@ -47,7 +56,7 @@ if sr != 48000:
     x = torchaudio.functional.resample(torch.from_numpy(x.T.copy()), sr, 48000).numpy().T
     sr = 48000
 n = len(x)
-model = UniverSR.from_pretrained("woongzip1/universr-audio", device="cuda")
+model = UniverSR.from_pretrained(str(snapshot), device="cuda")
 load_s = time.time() - t0
 
 

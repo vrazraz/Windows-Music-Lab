@@ -1,0 +1,11 @@
+# Native full engine rebuild
+
+`powershell -NoProfile -File windows\Build-FullEngine.ps1 -RunTests`
+
+The script compiles only the engine orchestration, request parser and model store with existing MSVC 2022, CMake and Ninja. It imports the already approved Release CUDA GGML/httplib/yyjson libraries from `windows/build`, or a sibling `source/windows/build`; override with `-BackendBuild`. Run `windows/Build.ps1` first if no native backend exists. The backend input is read-only. Outputs live in ignored `windows/build/full-engine`; no CUDA compilation, downloads, models or inference are part of this rebuild. At least 2 GiB free physical RAM and commit headroom are checked before compiling one job at a time.
+
+The supervisor uses `WINDOWS_MUSIC_LAB_LOCAL_ONLY=1`, `LAB_PORT`, and `RUACH_GPU_MUTEX=Local\WindowsMusicLab-GPU0`. Local mode requires a loopback bind and exact loopback Host with the engine port. All requests reject remote peers, foreign Origin/Referer, and `Sec-Fetch-Site: cross-site`. Browser origins may use only the engine or lab ports. CLI clients with no origin are allowed on loopback. The original private-network policy remains when local mode is disabled. The C++ HTTP clients contact only the lab on `127.0.0.1`.
+
+Actual GPU jobs own a Windows session named mutex using RAII. Queued GPU jobs report `waiting_gpu`; only actual execution reports `busy`. During lease waiting, the single owner thread services control work such as `/unload`, allowing a Python module holding the same lease to release the engine's resident models and KV cache. GPU jobs remain FIFO. Supervisors must refuse restart for `busy`, `waiting_gpu`, or nonzero `queued_jobs`. Cancellation, exceptions and abandoned owners release/recover the mutex. Startup metadata/backend configuration also takes the lease briefly, with a 60-second deadline.
+
+`engine-boundary-tests.exe` uses synthetic HTTP routes and synthetic queue work. Its 42 checks cover local API restrictions, blocked state changes, legacy policy, handoff, FIFO, queued cancellation, exception release, worker recovery, and a child process that abandons the mutex. It uses a unique test mutex; it never loads weights or renders music. Full supervisor startup and model inference are separate validation steps.

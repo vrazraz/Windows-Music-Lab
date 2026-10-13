@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "models": [],
+  "activeScope": "No required image-generation model downloads. Other Artist backends remain optional and need their own explicit approval.",
+  "removedProfiles": [
+    {
+      "id": "sdxl-base-fp16",
+      "status": "removed_by_user",
+      "filesRetained": true,
+      "automaticDownloadAllowed": false
+    }
+  ]
+}

@@ -23,6 +23,7 @@ import json, os, re, shutil, threading, time, urllib.error, urllib.parse, urllib
 from pathlib import Path
 
 import collection
+from platform_runtime import local_only, require_network
 
 # where the 💎 workspaces are published: one Storage Bucket, a folder each. heresy/tools/publish-workspaces.sh reads this
 # list too, so the studio fetches from where the tool puts. A bucket is read over plain HTTPS: its files from
@@ -57,6 +58,8 @@ def _url(src):
 def _token():
     """The owner's token while the repos are private: HF_TOKEN, HF_HOME's token, then the default place; none once they
     are public (never shown, never written anywhere)."""
+    if local_only():
+        return None
     if os.environ.get("HF_TOKEN"):
         return os.environ["HF_TOKEN"]
     places = ([Path(os.environ["HF_HOME"]) / "token"] if os.environ.get("HF_HOME") else []) + [Path.home() / ".cache" / "huggingface" / "token"]
@@ -79,6 +82,7 @@ class _TokenToTheHubOnly(urllib.request.HTTPRedirectHandler):
 
 def _get(path, dest=None):
     """One file of the bucket: its bytes, or written into dest (by parts, whole or not at all)."""
+    require_network("published workspace download")
     req = urllib.request.Request(f"{HUB}/buckets/{BUCKET}/resolve/{urllib.parse.quote(path, safe='')}",
                                  headers={"User-Agent": "RuachStudio (the diamond sets; a header carries latin-1 only)"})
     token = _token()
@@ -109,6 +113,8 @@ def _say(e):
 
 
 def _manifest(kit, src, refresh=False):
+    if local_only():
+        return None, "published workspace downloads are disabled in local-only mode"
     hit = CACHE.get(src["name"])
     if hit and not refresh and time.time() - hit[0] < TTL:
         return hit[1], hit[2]

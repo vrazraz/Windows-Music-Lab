@@ -1,0 +1,13 @@
+# Shared Artist runtime retained; SDXL removed from active scope. No kernels/spandrel/GGUF/Qwen/Krea weights installed.
+--index-url https://pypi.org/simple
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.11.0+cu128
+torchvision==0.26.0+cu128
+diffusers==0.41.0
+transformers==5.19.0
+accelerate==1.15.0
+peft==0.21.2
+safetensors==0.8.0
+numpy==2.2.6
+Pillow==12.3.0
+scipy==1.15.3

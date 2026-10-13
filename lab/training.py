@@ -19,24 +19,39 @@ it does not hold the lab's heavy lock (Whisper and the stems go on beside it).
 import json, math, os, re, shutil, signal, sqlite3, subprocess, threading, time
 from pathlib import Path
 
+from atomic_audio import replace_file
+from platform_runtime import (WINDOWS, job_environment, pid_alive, process_options, terminate_process, venv_python)
+
+_NATIVE_WORKERS = {}
+
 AUDIO = {".wav", ".flac", ".mp3", ".ogg", ".m4a"}
 RUNS = {}            # run name -> what its watcher knows: status, step, steps, loss, log tail, VRAM peak
 LOCK = threading.Lock()
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 
 
+def _read_json(path):
+    with Path(path).open(encoding="utf-8") as stream:
+        return json.load(stream)
+
+
+def valid_name(name):
+    reserved = {"CON", "PRN", "AUX", "NUL", *("COM" + str(n) for n in range(1, 10)), *("LPT" + str(n) for n in range(1, 10))}
+    return bool(NAME_RE.fullmatch(str(name))) and not name.endswith(".") and name.split(".")[0].upper() not in reserved
+
+
 def paths(kit):
-    aitk = Path(os.environ.get("AITK_ROOT", kit.parent / "AI_Toolkit"))
+    aitk = Path(os.environ.get("AITK_ROOT", (kit / "vendor/AI_Toolkit" if WINDOWS else kit.parent / "AI_Toolkit")))
     return {"raw": kit / "datasets" / "raw", "prepared": kit / "datasets" / "prepared", "runs": kit / "training",
             "loras": kit / "loras", "models": kit / "checkpoints" / "comfy", "aitk": aitk,
-            "aitk_py": aitk / ".venv" / "bin" / "python",
+            "aitk_py": venv_python(aitk),
             "head": kit / "checkpoints" / "yue2-mothersuperior-realaudio-tokenizer-v4"}
 
 
 def _seconds(p):
     try:
         out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(p)],
-                             capture_output=True, text=True, timeout=30).stdout.strip()
+                             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30).stdout.strip()
         return round(float(out), 1)
     except (ValueError, OSError, subprocess.SubprocessError):
         return None
@@ -57,6 +72,20 @@ def _voice(d):
         return None
 
 
+def native_readiness(cards):
+    maximum = max((int(card.get("total_mb") or 0) for card in cards), default=0) if isinstance(cards, list) else 0
+    supported = maximum >= 20000
+    if not isinstance(cards, list):
+        reason = "Не удалось проверить видеокарту. Для обучения требуется минимум 20 000 МБ свободной VRAM."
+    elif not supported:
+        reason = "Обучение требует минимум 20 000 МБ свободной VRAM на одной видеокарте. RTX 3060 12 ГБ не поддерживается этим профилем; int8-база распаковывается в bf16 и порог не снижает."
+    else:
+        reason = "Перед обучением требуется минимум 20 000 МБ свободной VRAM и полный локальный набор проверенных весов."
+    return {"native_windows": WINDOWS, "supported": supported, "minimum_free_vram_mb": 20000,
+            "reason": reason, "docs": "windows/FULL_AUDIO_APPROVAL.md",
+            "auto_download": False, "runtime_verified": False}
+
+
 def datasets(kit):
     """The raw folders and the prepared sets, with what the trainer needs to know."""
     P = paths(kit)
@@ -70,7 +99,7 @@ def datasets(kit):
     for d in sorted(P["prepared"].iterdir()) if P["prepared"].is_dir() else []:
         man = d / "dataset.json"
         if man.is_file():
-            m = json.load(open(man, encoding="utf-8"))
+            m = _read_json(man)
             prepared.append({"name": d.name, "tracks": len(m.get("tracks", [])), "from": m.get("from"), "made": m.get("made"),
                              "seconds": round(sum(t.get("seconds") or 0 for t in m.get("tracks", [])))})
     ready = P["aitk_py"].is_file() and (P["aitk"] / "run.py").is_file()
@@ -78,8 +107,10 @@ def datasets(kit):
     own = {q: (P["models"] / "checkpoints" / f).is_file() for q, f in OWN_CKPT.items()}
     own.update(mert=(kit / "checkpoints" / "MERT-v2-FullSong" / "model.safetensors").is_file(),
                head=(P["head"] / "tokenizer_head_joint_v4.pt").is_file())
+    cards = gpus()
     return {"raw": raw, "prepared": prepared, "aitk": str(P["aitk"]), "aitk_ready": ready, "own": own,
-            "head": P["head"].is_dir(), "runs": runs(kit)["runs"], "gpus": gpus()}
+            "head": P["head"].is_dir(), "runs": runs(kit)["runs"], "gpus": cards,
+            "readiness": native_readiness(cards)}
 
 
 def gpus():
@@ -87,7 +118,7 @@ def gpus():
     nvidia-smi is said, not shown as "no GPU"."""
     try:
         out = subprocess.run(["nvidia-smi", "--query-gpu=index,name,memory.total,memory.free", "--format=csv,noheader,nounits"],
-                             capture_output=True, text=True, timeout=20).stdout
+                             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20).stdout
         return [{"index": int(i), "name": n.strip(), "total_mb": int(t), "free_mb": int(f)}
                 for i, n, t, f in (l.split(",") for l in out.strip().splitlines())]
     except (OSError, ValueError, subprocess.SubprocessError) as e:
@@ -183,7 +214,7 @@ def prepare(kit, spec):
     P = paths(kit)
     src = _safe_dir(P["raw"], str(spec.get("from", "")))
     name = str(spec.get("name") or src.name)
-    if not NAME_RE.match(name):
+    if not valid_name(name):
         raise ValueError("a dataset name of letters, digits, _ . - (no spaces), up to 64")
     tracks = [t for t in spec.get("tracks") or [] if t.get("include", True)]
     if len(tracks) < 2:
@@ -234,7 +265,7 @@ def prepare_status(name):
 # ---- the run
 DEFAULTS = {"steps": 1500, "rank": 32, "lr": 1e-4, "save_epochs": 1, "cot": "off", "ar_loss_weight": 0.5,
             "ar_kl_weight": 0.2, "ar_lr_multiplier": 0.5, "train_window_frames": 1500, "do_separation": False,
-            "quant": "int8", "engine": "ai-toolkit"}
+            "quant": "int8", "engine": "ruach" if WINDOWS else "ai-toolkit"}
 # HERESY 1085: engine "ruach" is the studio's own trainer (lab/trainer, ported from Ostris' MIT code, exact on
 # parity: lab/trainer/PARITY.md), bf16 weights (Viktor: "не квантуй ничего"), Direct mode; "ai-toolkit" runs
 # Ostris' AI-Toolkit, kept as the reference.
@@ -267,7 +298,7 @@ def config_yaml(kit, run, dataset, o):
                   "train_text_encoder": False, "gradient_checkpointing": True, "noise_scheduler": "flowmatch",
                   "timestep_type": "sigmoid", "optimizer": "adamw8bit", "lr": o["lr"], "dtype": "bf16",
                   "unload_text_encoder": False, "disable_sampling": True},
-        "model": model}]}, "meta": {"name": run, "version": "1.0", "studio": "Ruach Studio"}}
+        "model": model}]}, "meta": {"name": run, "version": "1.0", "studio": "Windows Music Lab"}}
     return cfg
 
 
@@ -320,7 +351,7 @@ def checkpoints(kit, run, d=None):
     """The run's saved checkpoints, one per epoch (HERESY 1067), with the epoch each one closes."""
     P = paths(kit)
     d = d or _safe_dir(P["runs"], run)
-    meta = json.load(open(d / "run.json", encoding="utf-8")) if (d / "run.json").is_file() else {}
+    meta = _read_json(d / "run.json") if (d / "run.json").is_file() else {}
     per = meta.get("tracks") or (meta.get("options") or {}).get("steps_per_epoch") or 0
     out = []
     files = sorted((d / "output").rglob("*.safetensors")) if (d / "output").is_dir() else []
@@ -389,7 +420,7 @@ def delete_run(kit, run, with_loras):
     """The run's folder into trash/training/RUN@STAMP (and its adapters in loras/RUN/ with it, when asked);
     a running one must be stopped first. Nothing is deleted here: the trash keeps it until emptied."""
     P = paths(kit)
-    if _unit_state(run) == "active":
+    if _unit_state(run, kit) == "active":
         raise ValueError(f"{run} is running: stop it first")
     d = _safe_dir(P["runs"], run)
     dest = run_trash(kit) / f"{run}@{time.strftime('%Y%m%d-%H%M%S')}"
@@ -411,7 +442,7 @@ def trashed_runs(kit):
         f = t / "trashed.json"
         if not f.is_file():
             continue
-        info = json.load(open(f, encoding="utf-8"))
+        info = _read_json(f)
         meta = _meta(t / "run") if (t / "run").is_dir() else {}
         size = _bytes(t)
         out.append({"id": t.name, "name": info.get("run"), "trashed": info.get("when"), "loras": info.get("loras") or [],
@@ -425,7 +456,9 @@ def restore_run(kit, tid):
     t = run_trash(kit) / Path(tid).name
     if not (t / "trashed.json").is_file():
         raise FileNotFoundError(f"nothing in the trash as {tid}")
-    run = json.load(open(t / "trashed.json", encoding="utf-8"))["run"]
+    run = json.loads((t / "trashed.json").read_text(encoding="utf-8"))["run"]
+    if not valid_name(run):
+        raise ValueError("invalid run name in trash metadata")
     if (P["runs"] / run).exists():
         raise ValueError(f"a run named {run} is there again: rename or delete it first")
     shutil.move(str(t / "run"), str(P["runs"] / run))
@@ -451,8 +484,9 @@ def unpublish(kit, run, lora):
     """One adapter out of loras/RUN/: only while its checkpoint still lives in the run (the two are the same
     file, a hard link; or a copy of it), so nothing is lost and a click puts it back."""
     P = paths(kit)
-    f = P["loras"] / run / Path(lora).name
-    if not f.is_file():
+    directory = _safe_dir(P["loras"], run)
+    f = directory / Path(lora).name
+    if f.suffix.lower() != ".safetensors" or not f.is_file():
         raise FileNotFoundError(f"{lora} is not in loras/{run}/")
     d = _safe_dir(P["runs"], run)
     if not any((d / c["file"]).is_file() and c.get("lora") == f"{run}/{f.name}" for c in checkpoints(kit, run, d)) and f.name != f"{run}.safetensors":
@@ -481,7 +515,7 @@ def runs(kit):
     for d in sorted(P["runs"].iterdir(), reverse=True) if P["runs"].is_dir() else []:
         f = d / "run.json"
         if f.is_file():
-            r = json.load(open(f, encoding="utf-8"))
+            r = _read_json(f)
             live = RUNS.get(d.name)
             if live:
                 r.update({k: live.get(k) for k in ("status", "step", "steps", "loss", "ar_ce", "error", "lora", "vram_peak_mb")})
@@ -518,11 +552,27 @@ def _unit(run):
 
 
 def _systemctl(*args):
-    return subprocess.run(["systemctl", "--user", *args], capture_output=True, text=True, timeout=20)
+    if WINDOWS:
+        return subprocess.CompletedProcess(["systemctl", *args], 0, "", "")
+    return subprocess.run(["systemctl", "--user", *args], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20)
 
 
-def _unit_state(run):
+def _unit_state(run, kit=None):
     """active | failed | gone (ended well, or never was: a transient unit leaves when it ends well)."""
+    if WINDOWS:
+        worker = _NATIVE_WORKERS.get(run)
+        if worker is not None and worker.poll() is None:
+            return "active"
+        state_file = paths(kit)["runs"] / run / "native-process.json" if kit is not None else None
+        if not state_file or not state_file.is_file():
+            return "gone"
+        try:
+            state = json.loads(state_file.read_text(encoding="utf-8"))
+            if state.get("status") in ("starting", "running"):
+                return "active" if pid_alive(state.get("supervisor_pid", 0)) else "failed"
+            return "failed" if state.get("status") == "failed" else "gone"
+        except (OSError, ValueError, TypeError):
+            return "failed"
     state = _systemctl("is-active", _unit(run) + ".service").stdout.strip()   # one word, unlike show --value
     if state in ("active", "activating", "deactivating", "reloading"):
         return "active"
@@ -542,13 +592,14 @@ def _tail(d, n=12):
 
 
 def _meta(d):
-    return json.load(open(d / "run.json", encoding="utf-8"))
+    return json.loads((d / "run.json").read_text(encoding="utf-8"))
 
 
 def _save_meta(d, meta):
     tmp = d / "run.json.part"
-    json.dump(meta, open(tmp, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
-    tmp.replace(d / "run.json")
+    with tmp.open("w", encoding="utf-8") as stream:
+        json.dump(meta, stream, ensure_ascii=False, indent=1)
+    replace_file(tmp, d / "run.json")
 
 
 def _watch(kit, run):
@@ -561,7 +612,7 @@ def _watch(kit, run):
     job["vram_peak_mb"] = max(job.get("vram_peak_mb") or 0, meta.get("vram_peak_mb") or 0)
     gpu, total = meta.get("gpu"), meta.get("steps")
     while True:
-        state = _unit_state(run)
+        state = _unit_state(run, kit)
         tail = _tail(d)
         job["tail"] = tail
         for line in reversed(tail):
@@ -576,7 +627,7 @@ def _watch(kit, run):
             break
         try:
             out = subprocess.run(["nvidia-smi", "-i", str(gpu), "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
-                                 capture_output=True, text=True, timeout=10).stdout.strip()
+                                 capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10).stdout.strip()
             job["vram_peak_mb"] = max(job["vram_peak_mb"], int(out.split()[0]))
         except (ValueError, IndexError, OSError, subprocess.SubprocessError):
             pass
@@ -629,19 +680,21 @@ def train(kit, spec, gpu_picker):
     dataset = str(spec.get("dataset", ""))
     _safe_dir(P["prepared"], dataset)
     own = str(spec.get("engine") or DEFAULTS["engine"]) == "ruach"
+    if own and not venv_python(kit).is_file():
+        raise FileNotFoundError(f"the local audio environment is missing: {venv_python(kit)}")
     if not own and not P["aitk_py"].is_file():
         raise FileNotFoundError(f"AI-Toolkit is not at {P['aitk']} (set AITK_ROOT, or clone ostris/ai-toolkit there)")
     run = str(spec.get("name") or f"{dataset}-{time.strftime('%Y%m%d-%H%M')}")
-    if not NAME_RE.match(run):
+    if not valid_name(run):
         raise ValueError("a run name of letters, digits, _ . - (no spaces), up to 64")
     o = dict(DEFAULTS)
     for k, v in spec.items():
         if k in DEFAULTS:
             o[k] = type(DEFAULTS[k])(v) if not isinstance(DEFAULTS[k], bool) else bool(v)
     with LOCK:
-        if _unit_state(run) == "active":
+        if _unit_state(run, kit) == "active":
             raise ValueError(f"{run} is already running")
-    tracks = len(json.load(open(P["prepared"] / dataset / "dataset.json", encoding="utf-8")).get("tracks", []))
+    tracks = len(json.loads((P["prepared"] / dataset / "dataset.json").read_text(encoding="utf-8")).get("tracks", []))
     if tracks < 1:
         raise ValueError(f"{dataset} has no tracks")
     o["steps_per_epoch"] = tracks                     # batch 1: one step a track
@@ -691,20 +744,44 @@ def train(kit, spec, gpu_picker):
            "-p", f"StandardOutput=append:{log}", "-p", f"StandardError=append:{log}"]
     cmd += ["--setenv=" + k + "=" + v for k, v in env.items()]
     if own:
-        cmd += [str(kit / ".venv" / "bin" / "python"), str(kit / "lab" / "trainer" / "train.py"), str(d / "config.json")]
+        cmd += [str(venv_python(kit)), str(kit / "lab" / "trainer" / "train.py"), str(d / "config.json")]
     else:
         cmd += [str(P["aitk_py"]), "run.py", str(d / "config.yaml")]
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-    if r.returncode != 0:
-        meta.update(status="failed", error="systemd-run: " + (r.stderr.strip() or r.stdout.strip()))
-        _save_meta(d, meta)
-        raise RuntimeError(meta["error"])
+    if WINDOWS:
+        (d / "stop.requested").unlink(missing_ok=True)
+        native_cmd = ([str(venv_python(kit)), str(kit / "lab/trainer/train.py"), str(d / "config.json")]
+                      if own else [str(P["aitk_py"]), "run.py", str(d / "config.yaml")])
+        launch = {"command": native_cmd, "cwd": str(kit if own else P["aitk"]),
+                  "env": env, "grace_seconds": 60, "need_mb": 20000}
+        (d / "native-launch.json").write_text(json.dumps(launch, ensure_ascii=False), encoding="utf-8")
+        try:
+            with log.open("ab") as stream:
+                worker = subprocess.Popen([str(venv_python(kit)), str(kit / "lab/training_supervisor.py"), str(d)],
+                    cwd=str(kit), env=job_environment(kit), stdout=stream, stderr=subprocess.STDOUT,
+                    **process_options())
+            _NATIVE_WORKERS[run] = worker
+            # The supervisor replaces this with the running child and its eventual result.
+            if not (d / "native-process.json").is_file():
+                (d / "native-process.json").write_text(json.dumps({"status": "starting", "supervisor_pid": worker.pid}), encoding="utf-8")
+            meta["supervisor_pid"] = worker.pid
+            _save_meta(d, meta)
+        except OSError as error:
+            meta.update(status="failed", error="native training launch: " + str(error))
+            _save_meta(d, meta)
+            raise RuntimeError(meta["error"]) from error
+    else:
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
+        if r.returncode != 0:
+            meta.update(status="failed", error="systemd-run: " + (r.stderr.strip() or r.stdout.strip()))
+            _save_meta(d, meta)
+            raise RuntimeError(meta["error"])
     RUNS[run] = {"status": "running", "step": 0, "steps": o["steps"], "loss": None, "ar_ce": None, "tail": [], "vram_peak_mb": 0}
     threading.Thread(target=_watch, args=(kit, run), daemon=True).start()
     return dict(meta, step=0)
 
 
 def run_status(kit, run):
+    _safe_dir(paths(kit)["runs"], run)
     job = RUNS.get(run)
     if job:
         out = {"name": run, **{k: job.get(k) for k in ("status", "step", "steps", "loss", "ar_ce", "error", "lora", "tail", "vram_peak_mb")}}
@@ -716,23 +793,27 @@ def run_status(kit, run):
         return out
     f = paths(kit)["runs"] / run / "run.json"
     if f.is_file():
-        return json.load(open(f, encoding="utf-8"))
+        return _read_json(f)
     raise FileNotFoundError(f"no run {run}")
 
 
 def stop(kit, run):
     """SIGINT to the run's unit (AI-Toolkit saves on Ctrl-C), then a stop after a minute."""
-    if _unit_state(run) != "active":
+    if _unit_state(run, kit) != "active":
         raise ValueError(f"{run} is not running")
-    d = paths(kit)["runs"] / run
+    d = _safe_dir(paths(kit)["runs"], run)
     meta = _meta(d)
     meta["stopping"] = True
     _save_meta(d, meta)
+    if WINDOWS:
+        # Cooperative checkpointing first; the owning supervisor enforces its deadline.
+        (d / "stop.requested").write_text("stop\n", encoding="utf-8")
+        return {"name": run, "status": "stopping"}
     _systemctl("kill", "--signal=SIGINT", _unit(run) + ".service")
 
     def later():
         time.sleep(60)
-        if _unit_state(run) == "active":
+        if _unit_state(run, kit) == "active":
             _systemctl("stop", _unit(run) + ".service")
     threading.Thread(target=later, daemon=True).start()
     return {"name": run, "status": "stopping"}
@@ -764,8 +845,10 @@ def listeners(kit, cards=None):
     big = max((c["total_mb"] for c in cards), default=0) if isinstance(cards, list) else 0
     out = []
     for what, rel, proj, peak, need in LISTENERS:
+        from listener import mtmd_cli
         present = (kit / "checkpoints" / rel).exists() and (proj is None or (kit / "checkpoints" / proj).is_file())
-        out.append({"what": what, "path": rel, "mmproj": proj, "peak_mb": peak, "needs_mb": need, "present": present, "fits": big >= need})
+        out.append({"what": what, "path": rel, "mmproj": proj, "peak_mb": peak, "needs_mb": need, "present": present, "fits": big >= need,
+                    "runtime_ready": venv_python(kit).is_file() and (proj is None or mtmd_cli(kit).is_file())})
     return out
 
 
@@ -774,7 +857,7 @@ def listen(kit, spec, gpu_picker):
     P = paths(kit)
     name = str(spec.get("dataset", ""))
     d = _safe_dir(P["prepared"], name)
-    choice = [l for l in listeners(kit) if l["present"] and l["fits"] and (not spec.get("model") or l["path"] == spec["model"])]
+    choice = [l for l in listeners(kit) if l["present"] and l["fits"] and l["runtime_ready"] and (not spec.get("model") or l["path"] == spec["model"])]
     if not choice:
         raise ValueError("no listener fits here: a GGUF needs 8.2 GB on one card (Q4_K_M with the Q8_0 projector), bf16 23 GB; or none is downloaded")
     pick = choice[0]
@@ -785,17 +868,18 @@ def listen(kit, spec, gpu_picker):
         if job and job["status"] == "running":
             return dict(job, name=name)
         gpu, free = gpu_picker(pick["needs_mb"])
-        job = {"status": "running", "done": 0, "total": len(json.load(open(d / "dataset.json", encoding="utf-8"))["tracks"]),
+        job = {"status": "running", "done": 0, "total": len(_read_json(d / "dataset.json")["tracks"]),
                "model": pick["what"], "gpu": gpu, "started": time.time(), "tail": []}
         LISTEN[name] = job
 
     def work():
-        cmd = [str(kit / ".venv" / "bin" / "python"), str(Path(__file__).resolve().parent / "listener.py"),
+        p = None
+        cmd = [str(venv_python(kit)), str(Path(__file__).resolve().parent / "listener.py"),
                name, "--gpu", str(gpu), "--model", str(kit / "checkpoints" / pick["path"])]
         if pick.get("mmproj"):
             cmd += ["--mmproj", str(kit / "checkpoints" / pick["mmproj"])]
         try:
-            p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+            p = subprocess.Popen(cmd, cwd=str(kit), env=job_environment(kit), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", bufsize=1, **process_options())
             for line in p.stdout:
                 line = line.rstrip()
                 if re.match(r"^\d+/\d+ ", line):
@@ -808,6 +892,12 @@ def listen(kit, spec, gpu_picker):
                 job["error"] = job["tail"][-1] if job["tail"] else f"listener.py ended with {rc}"
         except Exception as e:
             job.update(status="failed", error=str(e))
+        finally:
+            if p is not None:
+                if p.poll() is None:
+                    terminate_process(p)
+                if p.stdout is not None:
+                    p.stdout.close()
     threading.Thread(target=work, daemon=True).start()
     return dict(job, name=name)
 
@@ -857,8 +947,8 @@ def listen_status(kit, name):
     P = paths(kit)
     d = _safe_dir(P["prepared"], name)
     job = LISTEN.get(name) or {"status": "none"}
-    s = json.load(open(d / "styles.json", encoding="utf-8")) if (d / "styles.json").is_file() else {}
-    man = json.load(open(d / "dataset.json", encoding="utf-8"))
+    s = _read_json(d / "styles.json") if (d / "styles.json").is_file() else {}
+    man = _read_json(d / "dataset.json")
     rows = []
     for t in man.get("tracks", []):
         cap = (d / (t["stem"] + ".txt")).read_text(encoding="utf-8").split("\n", 1)[0] if (d / (t["stem"] + ".txt")).is_file() else ""
@@ -886,7 +976,7 @@ def apply_styles(kit, spec):
         f.write_text(style + "\n" + rest, encoding="utf-8")
         n += 1
     sp = d / "styles.json"
-    s = json.load(open(sp, encoding="utf-8")) if sp.is_file() else {}
+    s = _read_json(sp) if sp.is_file() else {}
     s.setdefault("tags", {}).update(tags)
     s.update(applied=time.strftime("%Y-%m-%d %H:%M"), applied_trigger=trigger, applied_shared=shared)
     json.dump(s, open(sp, "w", encoding="utf-8"), ensure_ascii=False, indent=1)

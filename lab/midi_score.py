@@ -47,74 +47,39 @@ def _round(x):
 def read_midi(data):
     """A standard MIDI file: its tracks that have notes ([start, pitch, length] in ticks, by start, the higher first),
     and the first tempo, meter and key signature it carries."""
-    data, p = bytes(data), 0
-
-    def vlq():
-        nonlocal p
-        v = 0
-        while True:
-            b = data[p]
-            p += 1
-            v = (v << 7) | (b & 127)
-            if not b & 128:
-                return v
-
-    A.fail(data[:4] != b"MThd", "Not a MIDI file")
-    fmt, ntr, div = (int.from_bytes(data[i:i + 2], "big") for i in (8, 10, 12))
-    p = 8 + int.from_bytes(data[4:8], "big")
-    A.fail(div & 0x8000, "SMPTE-timed MIDI files are not supported")
-    tracks, tempo, meter, key, t = [], None, None, None, 0
-    while t < ntr and p < len(data):
-        A.fail(data[p:p + 4] != b"MTrk", "Broken MIDI track")
-        end = p + 8 + int.from_bytes(data[p + 4:p + 8], "big")
-        p += 8
-        now, run, name, on, notes = 0, 0, "", {}, []
-        while p < end:
-            now += vlq()
-            st = data[p]
-            if st & 0x80:
-                p += 1
-                if st < 0xF0:
-                    run = st
-            else:
-                st = run                                # running status
-            kind = st & 0xF0
-            if st == 0xFF:
-                mt = data[p]
-                p += 1
-                n = vlq()
-                body = data[p:p + n]
-                p += n
-                if mt == 0x03 and not name:
-                    name = body.decode("utf-8", "replace")
-                if mt == 0x51 and tempo is None:
-                    mpq = (body[0] << 16) | (body[1] << 8) | body[2]
-                    A.fail(mpq == 0, "The MIDI file's tempo is zero")
-                    tempo = _round(60000000 / mpq)
-                if mt == 0x58 and meter is None:
-                    meter = (body[0], 2 ** body[1])
-                if mt == 0x59 and key is None:
-                    key = (body[0] - 256 if body[0] > 127 else body[0], body[1] == 1)
-            elif st in (0xF0, 0xF7):
-                n = vlq()
-                p += n
-            elif kind in (0x90, 0x80):
-                pitch, vel = data[p], data[p + 1]
-                p += 2
-                if kind == 0x90 and vel > 0:
-                    on[pitch] = now
-                elif pitch in on:
-                    notes.append([on[pitch], pitch, now - on[pitch]])
-                    del on[pitch]
-            elif kind in (0xC0, 0xD0):
-                p += 1
-            else:
-                p += 2
-        p = end
+    from midi_io import tracks as parse_tracks
+    from collections import defaultdict, deque
+    try:
+        fmt, div, voices = parse_tracks(data)
+    except ValueError as error:
+        raise A.AbcError(str(error)) from None
+    tracks, tempo, meter, key = [], None, None, None
+    for voice in voices:
+        on, notes = defaultdict(deque), []
+        for now, event in voice["events"]:
+            kind, channel = event[0] >> 4, event[0] & 15
+            if kind not in (8, 9):
+                continue
+            pitch, velocity = event[1:]
+            if kind == 9 and velocity:
+                on[channel, pitch].append(now)
+            elif on[channel, pitch]:
+                start = on[channel, pitch].popleft()
+                if now > start:
+                    notes.append([start, pitch, now - start])
+        for _, kind, body in voice["metadata"]:
+            if kind == 0x51 and tempo is None:
+                A.fail(len(body) != 3 or not int.from_bytes(body, "big"), "invalid MIDI tempo")
+                tempo = _round(60000000 / int.from_bytes(body, "big"))
+            if kind == 0x58 and meter is None:
+                A.fail(len(body) != 4 or not body[0] or body[1] > 10, "invalid MIDI meter")
+                meter = (body[0], 2 ** body[1])
+            if kind == 0x59 and key is None:
+                A.fail(len(body) != 2 or body[1] not in (0, 1), "invalid MIDI key signature")
+                key = (body[0] - 256 if body[0] > 127 else body[0], body[1] == 1)
         if notes:
             notes.sort(key=lambda n: (n[0], -n[1]))
-            tracks.append({"name": name, "notes": notes})
-        t += 1
+            tracks.append({"name": voice["name"], "notes": notes})
     return {"format": fmt, "ppq": div, "tracks": tracks, "tempo": tempo, "meter": meter, "key": key}
 
 
@@ -187,7 +152,9 @@ def from_midi(data, key=None, bpm=None, meter=None, unit=16, ins_line="auto"):
     meter = tuple(meter or m["meter"] or (4, 4))
     bpm = _round(float(bpm or m["tempo"] or 120))
     A.fail(bpm < 1, f"Tempo {bpm} is not a tempo")
-    L = unit
+    L = int(unit)
+    A.fail(L != unit or L < 4 or L > 1024 or L & (L - 1), "unit must be a power of two from 4 to 1024")
+    A.meter_value(f"{meter[0]}/{meter[1]}")
     ticks_per_unit = m["ppq"] / (L / 4)
     bar_units = meter[0] * L / meter[1]
     A.fail(bar_units != int(bar_units), f"The meter {meter[0]}/{meter[1]} does not fit a 1/{L} grid")
@@ -234,6 +201,7 @@ def from_midi(data, key=None, bpm=None, meter=None, unit=16, ins_line="auto"):
     sig = A.key_accidentals(key)
     end_units = max((l[-1][0] + l[-1][2]) if l else 0 for l in lines.values())
     nbars = max(1, -(-end_units // bar_units))
+    A.fail(nbars > 20000, "MIDI score exceeds 20000 bars")
 
     def bars(notes):                                    # per bar, its tokens; a note crossing a bar line is tied
         out, i, carry = [], 0, None
@@ -302,7 +270,8 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         sys.exit(__doc__)
     try:
-        r = from_midi(open(sys.argv[1], "rb").read(), key=sys.argv[2] if len(sys.argv) > 2 else None)
+        from pathlib import Path
+        r = from_midi(Path(sys.argv[1]).read_bytes(), key=sys.argv[2] if len(sys.argv) > 2 else None)
     except A.AbcError as e:
         sys.exit(f"This MIDI could not become a score: {e}")
     print(json.dumps(r, ensure_ascii=False, indent=1))

@@ -1,72 +1,65 @@
-﻿# Windows Music Lab: установка и запуск
+# Windows Music Lab: полная нативная Windows-ветка
 
-Нативный Windows-порт [Ruach Studio](https://github.com/igrbible/Ruach_Studio) Виктора Журомского (Viktor Zhuromskyy), на основе версии 2.0.0-rc5, коммит `a69739725e81b74921c6e2a24da8e83659f45a3a`. Изменения для Windows: 12 октября 2026. Порт использует собственный текстовый заголовок Windows Music Lab.
+Ветка **`full-windows-port`** сохраняет базовую сборку в `main` и добавляет полный интерфейс Creator/Writer/Refiner/Artist/Librarian/Trainer. Это порт Ruach Studio Виктора Журомского (Viktor Zhuromskyy), upstream `a69739725e81b74921c6e2a24da8e83659f45a3a`. **WSL не нужен; полный профиль использует Python 3.10.**
 
-Работают генерация музыки из текста и стиля через C++/CUDA, инструментальный режим, MP3/WAV, библиотека сохранённых треков, 64 тега в пяти категориях и кнопка «Случайно». Длительность в интерфейсе: 5–30 секунд, по одному дублю. Полная Linux-студия с обучением LoRA, Python-комнатами, Artist и Refiner в этот проверенный сценарий не входит. WSL и Python не требуются.
+## Запуск подготовленного проекта
 
-## Требования
+Дважды щёлкните **`Start-Full.cmd`** в папке проекта, оставьте консоль открытой и перейдите на **http://localhost:41868**. Lab:127.0.0.1:41871; установленный и проверенный CPU Writer автоматически подключается на127.0.0.1:41872/v1. Генерация сама не запускается. Занятые порты и чужие процессы не заменяются.
 
-- Windows 11 x64 и NVIDIA GPU с работающим драйвером Windows. Проверено на RTX 3060 12 ГБ; другая видеокарта не проверялась.
-- Git и штатный `curl.exe`.
-- Visual Studio 2022 C++ Build Tools: «Разработка классических приложений на C++», Windows SDK, CMake и Ninja. Скрипт обнаруживает VS через `vswhere` или стандартные каталоги.
-- Для сборки — CUDA 12.8.1. Скрипт скачивает четыре официальных архива NVIDIA: **690 522 782 байта / 0,69 ГБ**. Проверено с MSVC 19.44 и CMake 3.31.6.
-- Модели при первом старте: **4 340 729 408 байт / 4,34 ГБ / 4,04 GiB**. Q8_0 — 3,81 ГБ, VAE F32 — 0,53 ГБ.
-- Оставьте 15–20 ГБ свободного диска для архивов, распаковки, сборки и моделей, плюс место для музыки. Сборка CUDA требует свободной оперативной памяти и системного commit; перед ней закройте тяжёлые приложения. По умолчанию используется один процесс компиляции.
-
-Ключи и платные сервисы не нужны. Скачивание требует интернета; генерация работает локально. Политика PowerShell, системный PATH, локаль, драйвер, WSL и настройки сети скриптами не меняются. При блокировке выполнения PowerShell покажет ошибку.
-
-## Первая установка
-
-Откройте PowerShell в папке, где хотите хранить проект:
+Без загрузки Writer: `Start-Full.cmd -WithoutWriter`. Остановка — Ctrl+C в консоли либо из другого PowerShell в этой папке:
 
 ```powershell
-git clone https://github.com/vrazraz/Windows-Music-Lab.git
+powershell.exe -NoProfile -File .\windows\Stop-Full.ps1
+```
+
+**Свежий clone ещё не готов к запуску.** В Git нет бинарников, venv, моделей или ready receipts. Full launcher отказывает при отсутствии обязательных файлов и не выполняет скрытую установку/загрузку optional-моделей. Прежний **`Start.cmd`** запускает минимальный интерфейс на41867 и автоматически получает только две недостающие базовые модели (4,34GB) при первом старте; это другой сценарий.
+
+## Подготовка нового clone
+
+Нужны Windows11 x64, NVIDIA Windows driver, Git/curl, Python3.10 x64 с `py.exe`, VS2022 Desktop C++/WindowsSDK/CMake/Ninja. Проверено на RTX3060 12GB, MSVC19.44 и CUDA12.8.1 sm86; другие карты не проверены. Node22+ и Chrome нужны для browser QA. Сборка — один процесс; требуется свободная RAM и системный commit. Для полного профиля оставляйте **50GiB диска после всех оставшихся записей**, плюс место под устанавливаемые данные.
+
+Команды ниже — **явная установка/скачивание/сборка после проверки источников, лицензий и размеров**. Они не исполняются самим Full launcher:
+
+```powershell
+git clone --branch full-windows-port https://github.com/vrazraz/Windows-Music-Lab.git
 cd Windows-Music-Lab
-powershell -NoProfile -File .\windows\Prepare-Toolkit.ps1
-powershell -NoProfile -File .\windows\Build.ps1 -Jobs 1
-.\Start.cmd
+powershell.exe -NoProfile -File .\windows\Prepare-Toolkit.ps1
+powershell.exe -NoProfile -File .\windows\Build.ps1 -Jobs 1
+powershell.exe -NoProfile -File .\windows\Build-FullEngine.ps1 -RunTests
+powershell.exe -NoProfile -File .\windows\Install-ValidationRuntime.ps1 -Phase All
+powershell.exe -NoProfile -File .\windows\Download-Models.ps1
+.\Start-Full.cmd -WithoutWriter
 ```
 
-Сборка может занять заметное время. После её завершения `Start.cmd` скачает отсутствующие модели из закреплённой ревизии Hugging Face, проверит размер и SHA256 каждого файла и только затем запустит движок. При следующих запусках правильные модели проверяются и используются повторно, без скачивания. Скачать их заранее можно командой:
+Runtime installer проверяет publisher metadata/хеши, получает binary wheels, устанавливает `.venv`/`.venv-art` и FFmpeg и проверяет imports; модельный inference не запускает. Не создавайте ready JSON вручную. Корректные базовые модели из соседнего `source/models` launcher может использовать повторно, иначе нужны модели в текущем `models/`.
 
-```powershell
-powershell -NoProfile -File .\windows\Download-Models.ps1
-```
+| Набор | Объём/источник | Порядок |
+|---|---|---|
+| YuE2 Q8_0 + VAE F32 |4 340 729 408 B; pinned Serveurperso conversion, original m-a-p; CC BY-NC4.0 | `Download-Models.ps1`; в минимальном Start.cmd — автоматически при отсутствии |
+| CUDA12.8.1 |690 522 782 B архивов NVIDIA | `Prepare-Toolkit.ps1`; существующий совместимый toolkit используется повторно |
+| Python runtime/FFmpeg | Windows wheels PyTorch/PyPI: прежний audited transfer≈9,82GB; FFmpeg archive114 768 076 B, дополнительно unpack/install space | `Install-ValidationRuntime.ps1 -Phase All`; текущие точные locks/metadata/caches проверяются installer |
+| Whisper |3 090 835 702 B,5 pinned Systran files | Только для transcription: `Download-ValidationModels.ps1 -PlanOnly`, затем явный запуск без PlanOnly. SDXL и остальные audio entries не скачиваются |
+| Writer |Qwen3-4B Q4_K_M:2 497 280 256 B, Apache-2.0; pinned llama.cpp MIT | [WRITER.md](WRITER.md): отдельные install/build и реальный короткий Test-Writer для ready marker; этот тест генерирует текст |
+| Listener |6 231 576 570 B,6 GGUF/notice files | [LISTENER_AI_APPROVAL.md](LISTENER_AI_APPROVAL.md): отдельный review/install/pilot; не обязателен для запуска Full |
 
-Загрузка показывает прогресс; неполный `.part` используется для продолжения. Ошибка сети, размера или SHA256 останавливает старт. Повреждённая существующая модель сохраняется: переместите её в другое место и повторите запуск. Если повреждён полный `.part`, также переместите его перед повторной загрузкой. Непроверенные файлы движок не открывает.
+Все данные моделей загружаются отдельно, сверяются по size/fullSHA и остаются в ignored local directories. `.part` возобновляется; ошибка проверки блокирует запуск. Секреты, платные сервисы и изменение системных PATH/CUDA/драйверов/защиты/сети не нужны. Большие загрузки и отдельные ML-проверки согласуются отдельно, если установку выполняет агент.
 
-CUDA хранится в `toolchain\cuda-12.8.1` внутри проекта. Для уже подготовленной старой установки автоматически используется имеющийся соседний `toolchain`. Для совместимого собственного toolkit передайте `-CudaRoot` в Build/Start. Для другой архитектуры GPU есть `Build.ps1 -CudaArchitecture 89`; по умолчанию `86` (RTX 3060). Такие варианты не проверялись на этой машине.
+## Что реально проверено
 
-## Обычный запуск
+- Шесть вкладок полного native UI и локальные HTTP API; ABC/MIDI roundtrip, staff preview у take, Writer notebook/autosave/version/import/export, собственные Librarian workspace/trash/restore/pin.
+- Реальный короткий структурированный русский ответ CPU Writer; его automatic start/stop. Часть независимых UI-сценариев использовала явно обозначенный mock, поэтому это не доказательство AI quality.
+- Синтетические DSP/Whisper, short Inspect/basic Remaster,10 структурных DAW archives. DAW приложения не открывались; XSD/import compatibility не подтверждена.
+- Listener: native CUDA и короткий speech/no-music pilot; музыкальные теги и длинное аудио не проверены.
+- Базовая нативная генерация text/style→audio проверялась ранее в минимальном порте. Advanced covers/remixes/LoRA/sliders и весь inherited Linux функционал не считаются проверенными.
 
-Дважды щёлкните `Start.cmd` в папке репозитория или выполните оттуда:
+Подробности: [FULL_WINDOWS_STATUS_RU.md](FULL_WINDOWS_STATUS_RU.md), [UI_INDEPENDENT_RU.md](UI_INDEPENDENT_RU.md), [REFINER_INDEPENDENT_RU.md](REFINER_INDEPENDENT_RU.md). Упомянутые там `cache/state` reports/screenshots принадлежат локальной reference installation и **не поставляются с clone**.
 
-```powershell
-powershell -NoProfile -File .\windows\Start.ps1
-```
+## Artist и optional-функции
 
-Откройте **http://localhost:41867**. Оставьте окно запуска открытым. Выберите пример или заполните стиль и текст; для первого дубля попробуйте 10–20 секунд. Теги дополняют поле стиля без дублирования; «Случайно» создаёт новый согласованный стиль и сама музыку не запускает.
+**SDXL удалён из активной интеграции**, pending test отменён, ожидание memory-ready снято. На reference installation старые weights/venv/user data сохранены; публикация их не содержит. Gallery/upload/metadata/compare и Krea/Qwen orchestration остаются. Сейчас подходящего установленного painter нет, Draw отключён с причиной.
 
-«Остановить» в интерфейсе отменяет текущую генерацию. **Ctrl+C** в окне запуска останавливает сервер. После этого можно снова запустить `Start.cmd`. Существующие треки сохраняются. Если порт занят, новый запуск завершается с ошибкой; уже работающий сервер не затрагивается. Другой порт: `Start.ps1 -Port 41868`.
+**Image-upscale пока не установлен:** отдельный следующий кандидат — Spandrel0.4.2/einops0.8.2 в ART и официальный RealESRGAN_x4plus;67 427 438 B payload. Нужны отдельное разрешение, wheel-body audit/install/imports и синтетический pilot; публикация ветки этого не разрешает.
 
-Сервер слушает только `127.0.0.1`. Параметры: Q8_0, standard VAE, контекст 12288, VAE tile 512, один дубль; FlashAttention включён, `GGML_CUDA_FA_QUANTS=f16-f16`. Интерфейс по умолчанию использует 20 секунд, MP3, direct и 32 шага; пример ставит 16 шагов. Встроенный токенизатор и AR-модель сами создают semantic tokens из текста — отдельный LLM не нужен.
+Stems удерживаются из-за неизвестных original RoFormer checkpoint terms; runtime/weights/pilots отсутствуют. UniverSR selected source path прочитан, но wheel не построен и runtime не проверен; gate11000MiB не прошёл recorded snapshot. SheetSage native300s peak неизвестен. Стандартные Krea/Qwen выше gates12GB и требуют отсутствующих весов; streaming не подтверждён. Trainer BF16 gate20000MiB требует24GB класс, realtraining не выполнялся. Каталог адаптеров не обязывает скачивать чужие голоса. [Optional audit/proposal](OPTIONAL_RUNTIME_APPROVAL_RU.md) — исследование и pins, **не готовая установка и не разрешение**.
 
-Каталоги относительно корня репозитория: `models` — веса; `outputs` — музыка; `windows\build` — сборка; `windows\state` — настройки; `windows\cache` — временные файлы. Они исключены из Git; не удаляйте музыку ради переустановки.
-
-## Что проверено
-
-Windows 11, RTX 3060 12 ГБ: нативная CUDA-сборка; настоящий путь текст + стиль → AR → NAR → VAE → WAV без semantic tokens на входе; стерео PCM16, 48 кГц, 9,999 секунды за 16,36 секунды; воспроизведение в браузере; теги на большом экране и телефоне. Скорость и качество других песен не гарантируются этими проверками.
-
-Без скачивания больших файлов и без генерации музыки:
-
-```powershell
-powershell -NoProfile -File .\windows\Test-ModelDownload.ps1
-```
-
-Проверка загрузчика использует маленькие изолированные fixtures для missing/partial/corrupt/reuse. Рабочие модели не изменяются. `Smoke-Test.ps1 -Seconds 10` намеренно создаёт один тестовый WAV на работающем сервере. `Check-UI.ps1 -Tags` проверяет интерфейс с установленными Chrome и Node 22+.
-
-## Лицензии
-
-Код и изменения Windows-порта: AGPL-3.0-or-later, исходный [LICENSE](../LICENSE) сохранён. YuE2 — оригинальные модели MAP / m-a-p ([backbone](https://huggingface.co/m-a-p/YuE2-3B), [VAE](https://huggingface.co/m-a-p/YuE2-Vae)), **CC BY-NC 4.0: некоммерческое использование**; GGUF-конверсия Serveurperso сохраняет эти условия. [Карточка закреплённой ревизии](https://huggingface.co/Serveurperso/YuE2-GGUF/blob/64b030e3deb6e8150d2b7c0db641ef5a17eca8a3/README.md). Условия моделей действуют отдельно от лицензии кода.
-
-Имя, логотип и исходные ассеты Ruach Studio принадлежат Viktor Zhuromskyy и имеют отдельные ограничения CC BY-NC-ND 4.0: [LICENSE-ASSETS.md](../LICENSE-ASSETS.md). Новый Windows-интерфейс оригинальный логотип не использует. NVIDIA CUDA скачивается отдельно и подчиняется условиям NVIDIA. Веса, CUDA, кеши и пользовательская музыка не публикуются.
+Исходники AGPL-3.0-or-later; third-party notices сохранены. Original attributed branding/assets CC BY-NC-ND4.0; модельные лицензии отдельны (YuE2 CC BY-NC4.0, Writer/Listener Apache-2.0 и прочие по manifests). Подробности/источники в [главном README](../README.md). Ветка публикует source/tests и уже публичные attributed upstream assets; модели, окружения, SDK, build, настройки, логи, QA outputs и пользовательские работы остаются локально.

@@ -29,6 +29,9 @@ A token is asked only when RUACH_API_TOKEN is set, and only of callers not on th
 import base64, json, math, os, re, threading, time, urllib.error, urllib.parse, urllib.request
 from pathlib import Path
 
+import platform_runtime as runtime
+import hmac
+
 import midi_score                                       # HERESY 1145
 
 VERSION = "1"
@@ -53,14 +56,14 @@ def _engine(path, body=None, timeout=60):
     return json.loads(raw)
 
 
-def _authorized(headers):
+def _authorized(headers, remote="127.0.0.1"):
     token = os.environ.get("RUACH_API_TOKEN", "")
     if not token:
         return True
-    remote = (headers.get("X-Remote-Addr") or "127.0.0.1").replace("::ffff:", "")
-    if remote in ("127.0.0.1", "::1"):
+    # The actual peer comes from Handler, never a caller-controlled X-Remote-Addr.
+    if runtime.is_loopback(remote):
         return True
-    return (headers.get("Authorization") or "") == "Bearer " + token
+    return hmac.compare_digest(headers.get("Authorization") or "", "Bearer " + token)
 
 
 def _row(r):
@@ -75,7 +78,7 @@ def _pending(ctx, add=None, done=None):
     with _PENDING_LOCK:
         p = ctx["config_dir"]() / "api-filing.json"
         try:
-            rows = json.load(open(p, encoding="utf-8"))
+            rows = runtime.read_json(p)
         except (OSError, ValueError):
             rows = []
         if add or done is not None:
@@ -84,7 +87,7 @@ def _pending(ctx, add=None, done=None):
             if done is not None:
                 rows = [r for r in rows if str(r.get("job")) != str(done)]
             tmp = p.with_name(p.name + ".part")
-            json.dump(rows, open(tmp, "w", encoding="utf-8"), ensure_ascii=False)
+            runtime.write_json(tmp, rows, ensure_ascii=False)
             os.replace(tmp, p)
         return rows
 
@@ -144,8 +147,8 @@ def openapi():
             "instrumental": b, "duration": {"type": "number"}, "min_seconds": {"type": "number"}, "music_seed": i, "sound_seed": i, "abc": s, "loras": a,
             "vae": s, "workspace": s, "midi_b64": s, "midi_key": s, "midi_ins": {"type": "string", "enum": ["auto", "keep", "none"]}}
     return {"openapi": "3.1.0",
-            "info": {"title": "Ruach Studio API", "version": VERSION,
-                     "description": "Songs from words on this machine. Private networks only; a token when RUACH_API_TOKEN is set."},
+            "info": {"title": "Windows Music Lab API", "version": VERSION,
+                     "description": "Songs from words on this machine. Loopback only. External services disabled in Windows local-only mode."},
             "servers": [{"url": "/api/v1"}],
             "paths": {
                 "/health": {"get": op("The engine, the lab and the cards")},
@@ -170,7 +173,7 @@ def openapi():
                 "/takes/{name}/upscale": {"post": op("UniverSR upscale", {"mode": {"type": "string", "enum": ["subtle", "normal", "high", "extreme"]}, "variants": i, "keep": b, "source": s}, [("name", "path", "string")])},
                 "/takes/{name}/lyrics-check": {"post": op("Whisper against the lyrics", {"source": s, "again": b}, [("name", "path", "string")])},
                 "/takes/{name}/artwork": {"get": op("The take's artwork (a redirect to the JPEG)", params=[("name", "path", "string")]),
-                                          "post": op("Draw the artwork: a prompt from the style and words, an SDXL picture; ask again until it is done",
+                                          "post": op("Draw the artwork: a prompt from the style and words, a picture from an installed supported Krea/Qwen painter; ask again until it is done",
                                                      {"again": b, "seed": i}, [("name", "path", "string")])},
                 "/workspaces": {"get": op("The workspaces and how many takes each holds")},
                 "/workspaces/{ws}": {"post": op("Add, take out or move takes", {"op": {"type": "string", "enum": ["add", "remove", "move"]},
@@ -180,7 +183,7 @@ def openapi():
 
 def handle(method, path, query, body, headers, ctx):
     """(status, JSON) for /api/…; raises Redirect for a file the engine serves."""
-    if not _authorized(headers):
+    if not _authorized(headers, ctx.get("remote_addr", "127.0.0.1")):
         return 401, {"error": "a token is asked of callers not on this machine: Authorization: Bearer …"}
     m = re.match(r"^/api/v(\d+)(/.*)?$", path)
     if not m:
@@ -192,7 +195,7 @@ def handle(method, path, query, body, headers, ctx):
     col, outputs, cfg = ctx["collection"], ctx["outputs"], ctx["config_dir"]
 
     if method == "GET" and rest == "/":
-        return 200, {"name": "Ruach Studio API", "version": VERSION, "studio": STUDIO, "openapi": "/api/v1/openapi.json",
+        return 200, {"name": "Windows Music Lab API", "version": VERSION, "studio": STUDIO, "openapi": "/api/v1/openapi.json",
                      "routes": [ln.strip() for ln in __doc__.split("\n\n")[1].splitlines() if ln.strip()]}
     if method == "GET" and rest == "/openapi.json":
         return 200, openapi()
@@ -293,7 +296,7 @@ def handle(method, path, query, body, headers, ctx):
             return 404, {"error": f"no take {name}"}
         if method == "GET" and not what:
             row = next((r for r in col.catalog(outputs, cfg())["takes"] if r["name"] == name), {})
-            req = json.load(open(d / "request.json", encoding="utf-8")) if (d / "request.json").is_file() else {}
+            req = runtime.read_json(d / "request.json") if (d / "request.json").is_file() else {}
             made = {k: req.get(k) for k in ("style", "lyrics", "abc", "cot", "duration", "lm_seed", "seed", "loras", "vae", "steps", "solver")}
             art = ctx["art"]["info"](name) if ctx.get("art") else None
             return 200, dict(_row(row), request=made, audio=f"/api/v1/takes/{name}/audio",

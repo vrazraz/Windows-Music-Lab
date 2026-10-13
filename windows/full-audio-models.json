@@ -1,0 +1,395 @@
+{
+  "schemaVersion": 1,
+  "purpose": "review candidate; does not authorize downloads or inference",
+  "metadataAudited": "2026-10-12",
+  "profiles": {
+    "creator-transcriber": {
+      "verification": "not run; extra native transcriber model required"
+    },
+    "whisper": {
+      "verification": "all local pinned data verified; parent real CUDA synthetic speech and word timings passed; CPU int8 untested",
+      "freeVramMB": 5000,
+      "resourceNote": "Windows admission threshold; parent measured actual short CUDA execution, see root validation evidence"
+    },
+    "audio-upscale": {
+      "verification": "not run; upstream approximately10GB peak at20sec",
+      "freeVramMB": 11000
+    },
+    "listener-q4": {
+      "verification": "all5 pinned data size/SHA verified; native v0.6.0 sm86 CUDA built; real10s SAPI decode exit0, full29/29 layers+audio encoder CUDA; scoped speech-vs-music assessment passed; general music tagging and120s unverified",
+      "freeVramMB": 8200,
+      "upstreamPeakMB": 7480,
+      "downloadLedger": "windows/cache/listener/network-ledger.json",
+      "receivedPayloadBytes": 6231576570,
+      "approvedCapBytes": 6300000000,
+      "chargedArtifactPayloadUpperBoundBytes": 6248286558,
+      "historicalRedirectAllowanceBytes": 50331648,
+      "historicalRedirectAllowanceMeasured": false,
+      "historicalAllHttpBodyCapVerified": false,
+      "accountingNote": "Final artifact sizes/SHA and payload counters verified; historical urllib redirects not recorded.48MiB assumed allowance is planning only. No cap reset or redownload.",
+      "inferenceEvidence": "windows/cache/listener/pilot/windows-listener-pilot-20261012-205111-9b08f8/attempt-20261012-230751-c4e836/metrics.json",
+      "runtimeProof": "windows/build/listener-cuda/runtime-proof.json",
+      "observedTotalGpuUsedMiB": 8520,
+      "observedNativePeakCommitBytes": 8769142784,
+      "observedNativePeakWorkingSetBytes": 4823511040,
+      "generalMusicTaggingVerified": false,
+      "longAudioVerified": false,
+      "shortPilotRequiredInitialCommitGiB": 11,
+      "requiredInitialAvailableRamGiB": 10
+    },
+    "stems-vocals": {
+      "verification": "offline resolver mocked; real inference pending",
+      "freeVramMB": 8000,
+      "resourceNote": "Windows admission threshold; no local ML measurement performed"
+    },
+    "stems-four": {
+      "verification": "offline resolver mocked; real inference pending",
+      "freeVramMB": 8000,
+      "resourceNote": "Windows admission threshold; no local ML measurement performed"
+    },
+    "trainer-bf16": {
+      "verification": "process lifecycle tested; RTX3060 12GB blocked",
+      "freeVramMB": 20000
+    },
+    "trainer-semantic": {
+      "verification": "not run; MERT custom Python execution requires explicit approval"
+    }
+  },
+  "models": [
+    {
+      "profile": "creator-transcriber",
+      "repo": "Serveurperso/YuE2-GGUF",
+      "revision": "64b030e3deb6e8150d2b7c0db641ef5a17eca8a3",
+      "file": "SheetSage2-Q8_0.gguf",
+      "destination": "models/SheetSage2-Q8_0.gguf",
+      "url": "https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/64b030e3deb6e8150d2b7c0db641ef5a17eca8a3/SheetSage2-Q8_0.gguf",
+      "size": 957571488,
+      "sha256": "4507d8c1d9245f312c0894ea610ab18fbcbf31443764b5bd6a60e4b6df59e973",
+      "license": "cc-by-nc-4.0"
+    },
+    {
+      "profile": "whisper",
+      "repo": "Systran/faster-whisper-large-v3",
+      "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+      "file": "config.json",
+      "destination": "whisper/whisper-large-v3-ct2-float16/config.json",
+      "url": "https://huggingface.co/Systran/faster-whisper-large-v3/resolve/edaa852ec7e145841d8ffdb056a99866b5f0a478/config.json",
+      "size": 2394,
+      "sha256": "a9306624f5ec14270a014b647e5c316b6e03a662c369758d1b90697a7b0655b9",
+      "license": "mit"
+    },
+    {
+      "profile": "whisper",
+      "repo": "Systran/faster-whisper-large-v3",
+      "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+      "file": "model.bin",
+      "destination": "whisper/whisper-large-v3-ct2-float16/model.bin",
+      "url": "https://huggingface.co/Systran/faster-whisper-large-v3/resolve/edaa852ec7e145841d8ffdb056a99866b5f0a478/model.bin",
+      "size": 3087284237,
+      "sha256": "69f74147e3334731bc3a76048724833325d2ec74642fb52620eda87352e3d4f1",
+      "license": "mit"
+    },
+    {
+      "profile": "whisper",
+      "repo": "Systran/faster-whisper-large-v3",
+      "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+      "file": "preprocessor_config.json",
+      "destination": "whisper/whisper-large-v3-ct2-float16/preprocessor_config.json",
+      "url": "https://huggingface.co/Systran/faster-whisper-large-v3/resolve/edaa852ec7e145841d8ffdb056a99866b5f0a478/preprocessor_config.json",
+      "size": 340,
+      "sha256": "7ccc62c6f2765af1f3b46c00c9b5894426835a05021c8b9c01eecb6dfb542711",
+      "license": "mit"
+    },
+    {
+      "profile": "whisper",
+      "repo": "Systran/faster-whisper-large-v3",
+      "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+      "file": "tokenizer.json",
+      "destination": "whisper/whisper-large-v3-ct2-float16/tokenizer.json",
+      "url": "https://huggingface.co/Systran/faster-whisper-large-v3/resolve/edaa852ec7e145841d8ffdb056a99866b5f0a478/tokenizer.json",
+      "size": 2480617,
+      "sha256": "6d8cbd7cd0d8d5815e478dac67b85a26bbe77c1f5e0c6d76d1ce2abc0e5f21ca",
+      "license": "mit"
+    },
+    {
+      "profile": "whisper",
+      "repo": "Systran/faster-whisper-large-v3",
+      "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+      "file": "vocabulary.json",
+      "destination": "whisper/whisper-large-v3-ct2-float16/vocabulary.json",
+      "url": "https://huggingface.co/Systran/faster-whisper-large-v3/resolve/edaa852ec7e145841d8ffdb056a99866b5f0a478/vocabulary.json",
+      "size": 1068114,
+      "sha256": "c69260f2ab26d659b7c398f9a2b2b48ed0df16c3b47d7326782fd9cba71690c1",
+      "license": "mit"
+    },
+    {
+      "profile": "audio-upscale",
+      "repo": "woongzip1/universr-audio",
+      "revision": "1c3294844285af851b6ffa56cbde4e43cd41fc2b",
+      "file": "config.yaml",
+      "destination": "checkpoints/universr-audio/config.yaml",
+      "url": "https://huggingface.co/woongzip1/universr-audio/resolve/1c3294844285af851b6ffa56cbde4e43cd41fc2b/config.yaml",
+      "size": 533,
+      "sha256": "2e035dacc833368319f9d5ba1a34e5efd343faf749008d433e309f3c65f4dac9",
+      "license": "CC-BY-4.0 weights; MIT code"
+    },
+    {
+      "profile": "audio-upscale",
+      "repo": "woongzip1/universr-audio",
+      "revision": "1c3294844285af851b6ffa56cbde4e43cd41fc2b",
+      "file": "pytorch_model.bin",
+      "destination": "checkpoints/universr-audio/pytorch_model.bin",
+      "url": "https://huggingface.co/woongzip1/universr-audio/resolve/1c3294844285af851b6ffa56cbde4e43cd41fc2b/pytorch_model.bin",
+      "size": 229072395,
+      "sha256": "eb99f98943cc32fa82226c2da14b32b5d890416070af4946acbce442b30dc20b",
+      "license": "CC-BY-4.0 weights; MIT code"
+    },
+    {
+      "profile": "listener-q4",
+      "repo": "ggml-org/Qwen2.5-Omni-7B-GGUF",
+      "revision": "89b785438c8901d4635e42f50480ba5985a1bbf1",
+      "file": "Qwen2.5-Omni-7B-Q4_K_M.gguf",
+      "destination": "checkpoints/Qwen2.5-Omni-7B-GGUF/Qwen2.5-Omni-7B-Q4_K_M.gguf",
+      "url": "https://huggingface.co/ggml-org/Qwen2.5-Omni-7B-GGUF/resolve/89b785438c8901d4635e42f50480ba5985a1bbf1/Qwen2.5-Omni-7B-Q4_K_M.gguf",
+      "size": 4683072384,
+      "sha256": "09883dff531dc56923a041c9c99c7c779e26ffde32caa83adeeb7502ec3b50fe",
+      "license": "Apache-2.0 original Qwen initial 4728b48bcd588a84f0353426515f27f5db911d8a and ae9e1690543ffd5c0221dc27f79834d0294cba00 verified identical; retain both conversion notices",
+      "downloadVerified": true
+    },
+    {
+      "profile": "listener-q4",
+      "repo": "mradermacher/Qwen2.5-Omni-7B-GGUF",
+      "revision": "658a1c70e91733330bcad348eead24bb4d15d9eb",
+      "file": "Qwen2.5-Omni-7B.mmproj-Q8_0.gguf",
+      "destination": "checkpoints/Qwen2.5-Omni-7B-GGUF/mradermacher/Qwen2.5-Omni-7B.mmproj-Q8_0.gguf",
+      "url": "https://huggingface.co/mradermacher/Qwen2.5-Omni-7B-GGUF/resolve/658a1c70e91733330bcad348eead24bb4d15d9eb/Qwen2.5-Omni-7B.mmproj-Q8_0.gguf",
+      "size": 1548488608,
+      "sha256": "858f1ff0dab23c9139a20a3ef44cdeff85fd392c401ffcf436fe647d3496fdea",
+      "license": "Apache-2.0 original Qwen initial 4728b48bcd588a84f0353426515f27f5db911d8a and ae9e1690543ffd5c0221dc27f79834d0294cba00 verified identical; retain both conversion notices",
+      "downloadVerified": true
+    },
+    {
+      "profile": "stems-vocals",
+      "repo": "Eddycrack864/Music-Source-Separation-Training",
+      "revision": "4a3768dfdd3c74104f63b9edda5b1efc8bd29f2c",
+      "file": "model_bs_roformer_ep_317_sdr_12.9755.ckpt",
+      "destination": "separation/roformer/model_bs_roformer_ep_317_sdr_12.9755.ckpt",
+      "url": "https://huggingface.co/Eddycrack864/Music-Source-Separation-Training/resolve/4a3768dfdd3c74104f63b9edda5b1efc8bd29f2c/model_bs_roformer_ep_317_sdr_12.9755.ckpt",
+      "size": 639331213,
+      "sha256": "5b84f37e8d444c8cb30c79d77f613a41c05868ff9c9ac6c7049c00aefae115aa",
+      "license": "MIT declared by separator project and mirror; credit UVR/developers; original checkpoint source TRvlvr release",
+      "original_url": "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/model_bs_roformer_ep_317_sdr_12.9755.ckpt"
+    },
+    {
+      "profile": "stems-vocals",
+      "repo": "Eddycrack864/Music-Source-Separation-Training",
+      "revision": "4a3768dfdd3c74104f63b9edda5b1efc8bd29f2c",
+      "file": "model_bs_roformer_ep_317_sdr_12.9755.yaml",
+      "destination": "separation/roformer/model_bs_roformer_ep_317_sdr_12.9755.yaml",
+      "url": "https://huggingface.co/Eddycrack864/Music-Source-Separation-Training/resolve/4a3768dfdd3c74104f63b9edda5b1efc8bd29f2c/model_bs_roformer_ep_317_sdr_12.9755.yaml",
+      "size": 2273,
+      "sha256": "2bfdd16c656bd9519aba757cc4f8834b7ede675eb1e00ec4772d74ae1c41af7f",
+      "license": "MIT declared by separator project and mirror; credit UVR/developers; original checkpoint source TRvlvr release",
+      "original_url": "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/model_bs_roformer_ep_317_sdr_12.9755.yaml"
+    },
+    {
+      "profile": "stems-four",
+      "repo": "goldhub/Ruach_Studio_Models",
+      "revision": "bb37de868d9988d15d43291a1751356ef7574390",
+      "file": "separation/demucs/04573f0d-f3cf25b2.th",
+      "destination": "separation/demucs/04573f0d-f3cf25b2.th",
+      "url": "https://dl.fbaipublicfiles.com/demucs/hybrid_transformer/04573f0d-f3cf25b2.th",
+      "size": 84141271,
+      "sha256": "f3cf25b222c4eed7cd49dd8b2c9597d50c18bd154090f7b919cfa5f93cf22c49",
+      "license": "Demucs MIT (Meta); repository mixed-license other; use original Demucs notices",
+      "metadata_source": "https://huggingface.co/goldhub/Ruach_Studio_Models/resolve/bb37de868d9988d15d43291a1751356ef7574390/separation/demucs/04573f0d-f3cf25b2.th",
+      "source_note": "Download original Meta/UVR bytes, verified against full SHA256 from upstream unchanged mirror; mirror scheduled to disappear on 2026-10-17"
+    },
+    {
+      "profile": "stems-four",
+      "repo": "goldhub/Ruach_Studio_Models",
+      "revision": "bb37de868d9988d15d43291a1751356ef7574390",
+      "file": "separation/demucs/92cfc3b6-ef3bcb9c.th",
+      "destination": "separation/demucs/92cfc3b6-ef3bcb9c.th",
+      "url": "https://dl.fbaipublicfiles.com/demucs/hybrid_transformer/92cfc3b6-ef3bcb9c.th",
+      "size": 84141271,
+      "sha256": "ef3bcb9c8b40d14ae5d51b6db2587339cc12c6b77c0be151ce6d69002e087bf2",
+      "license": "Demucs MIT (Meta); repository mixed-license other; use original Demucs notices",
+      "metadata_source": "https://huggingface.co/goldhub/Ruach_Studio_Models/resolve/bb37de868d9988d15d43291a1751356ef7574390/separation/demucs/92cfc3b6-ef3bcb9c.th",
+      "source_note": "Download original Meta/UVR bytes, verified against full SHA256 from upstream unchanged mirror; mirror scheduled to disappear on 2026-10-17"
+    },
+    {
+      "profile": "stems-four",
+      "repo": "goldhub/Ruach_Studio_Models",
+      "revision": "bb37de868d9988d15d43291a1751356ef7574390",
+      "file": "separation/demucs/d12395a8-e57c48e6.th",
+      "destination": "separation/demucs/d12395a8-e57c48e6.th",
+      "url": "https://dl.fbaipublicfiles.com/demucs/hybrid_transformer/d12395a8-e57c48e6.th",
+      "size": 84141271,
+      "sha256": "e57c48e6b0e38af4f7118d7bd08c49f0a0c0edf7d09143bdd902ea0d237303e6",
+      "license": "Demucs MIT (Meta); repository mixed-license other; use original Demucs notices",
+      "metadata_source": "https://huggingface.co/goldhub/Ruach_Studio_Models/resolve/bb37de868d9988d15d43291a1751356ef7574390/separation/demucs/d12395a8-e57c48e6.th",
+      "source_note": "Download original Meta/UVR bytes, verified against full SHA256 from upstream unchanged mirror; mirror scheduled to disappear on 2026-10-17"
+    },
+    {
+      "profile": "stems-four",
+      "repo": "goldhub/Ruach_Studio_Models",
+      "revision": "bb37de868d9988d15d43291a1751356ef7574390",
+      "file": "separation/demucs/f7e0c4bc-ba3fe64a.th",
+      "destination": "separation/demucs/f7e0c4bc-ba3fe64a.th",
+      "url": "https://dl.fbaipublicfiles.com/demucs/hybrid_transformer/f7e0c4bc-ba3fe64a.th",
+      "size": 84141271,
+      "sha256": "ba3fe64ae8ef66ac9a4857222ce48efbdc5eb3ad375cb79dd13debee5aaa4066",
+      "license": "Demucs MIT (Meta); repository mixed-license other; use original Demucs notices",
+      "metadata_source": "https://huggingface.co/goldhub/Ruach_Studio_Models/resolve/bb37de868d9988d15d43291a1751356ef7574390/separation/demucs/f7e0c4bc-ba3fe64a.th",
+      "source_note": "Download original Meta/UVR bytes, verified against full SHA256 from upstream unchanged mirror; mirror scheduled to disappear on 2026-10-17"
+    },
+    {
+      "profile": "stems-four",
+      "repo": "goldhub/Ruach_Studio_Models",
+      "revision": "bb37de868d9988d15d43291a1751356ef7574390",
+      "file": "separation/demucs/htdemucs_ft.yaml",
+      "destination": "separation/demucs/htdemucs_ft.yaml",
+      "url": "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/htdemucs_ft.yaml",
+      "size": 149,
+      "sha256": "69470b8c1bbd674437b51bc9fb491327a10ab0396b702c93389b9cf750016346",
+      "license": "Demucs MIT (Meta); repository mixed-license other; use original Demucs notices",
+      "metadata_source": "https://huggingface.co/goldhub/Ruach_Studio_Models/resolve/bb37de868d9988d15d43291a1751356ef7574390/separation/demucs/htdemucs_ft.yaml",
+      "source_note": "Download original Meta/UVR bytes, verified against full SHA256 from upstream unchanged mirror; mirror scheduled to disappear on 2026-10-17"
+    },
+    {
+      "profile": "trainer-bf16",
+      "repo": "Comfy-Org/YuE2",
+      "revision": "2f76ca75e6ee094169de899cc7fc99d6887e2196",
+      "file": "checkpoints/yue2_3b_bf16.safetensors",
+      "destination": "checkpoints/comfy/checkpoints/yue2_3b_bf16.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/YuE2/resolve/2f76ca75e6ee094169de899cc7fc99d6887e2196/checkpoints/yue2_3b_bf16.safetensors",
+      "size": 7799983228,
+      "sha256": "33765adbf9813c9a50318218760b2fd819a319862460a04884607581961c6fee",
+      "license": "cc-by-nc-4.0"
+    },
+    {
+      "profile": "trainer-semantic",
+      "repo": "m-a-p/MERT-v2-FullSong",
+      "revision": "d8ba1c745e733b3908ce6ad16ebeb17ac7600a42",
+      "file": "LICENSE",
+      "destination": "checkpoints/MERT-v2-FullSong/LICENSE",
+      "url": "https://huggingface.co/m-a-p/MERT-v2-FullSong/resolve/d8ba1c745e733b3908ce6ad16ebeb17ac7600a42/LICENSE",
+      "size": 20000,
+      "sha256": "73593d6cad4ca80f3ab1448a4908f92ab802dfffe029561e3b12fa7d07c8b87c",
+      "license": "cc-by-nc-4.0"
+    },
+    {
+      "profile": "trainer-semantic",
+      "repo": "m-a-p/MERT-v2-FullSong",
+      "revision": "d8ba1c745e733b3908ce6ad16ebeb17ac7600a42",
+      "file": "THIRD_PARTY_NOTICES.md",
+      "destination": "checkpoints/MERT-v2-FullSong/THIRD_PARTY_NOTICES.md",
+      "url": "https://huggingface.co/m-a-p/MERT-v2-FullSong/resolve/d8ba1c745e733b3908ce6ad16ebeb17ac7600a42/THIRD_PARTY_NOTICES.md",
+      "size": 541,
+      "sha256": "ce8fd578969f1bdad9a0be5e20cab0251dc4253bd4dbfaa9abeb1c11d68bafdc",
+      "license": "cc-by-nc-4.0"
+    },
+    {
+      "profile": "trainer-semantic",
+      "repo": "m-a-p/MERT-v2-FullSong",
+      "revision": "d8ba1c745e733b3908ce6ad16ebeb17ac7600a42",
+      "file": "config.json",
+      "destination": "checkpoints/MERT-v2-FullSong/config.json",
+      "url": "https://huggingface.co/m-a-p/MERT-v2-FullSong/resolve/d8ba1c745e733b3908ce6ad16ebeb17ac7600a42/config.json",
+      "size": 882,
+      "sha256": "f2e194895f58be3ddba327255db129ff0e3bee550cc0ecf08e4d22d79ce3bca3",
+      "license": "cc-by-nc-4.0"
+    },
+    {
+      "profile": "trainer-semantic",
+      "repo": "m-a-p/MERT-v2-FullSong",
+      "revision": "d8ba1c745e733b3908ce6ad16ebeb17ac7600a42",
+      "file": "configuration_mert2.py",
+      "destination": "checkpoints/MERT-v2-FullSong/configuration_mert2.py",
+      "url": "https://huggingface.co/m-a-p/MERT-v2-FullSong/resolve/d8ba1c745e733b3908ce6ad16ebeb17ac7600a42/configuration_mert2.py",
+      "size": 3860,
+      "sha256": "77b53ec9d7ee31a599d744fb006e812c7eeaf7390deb46e2f460cf8c17b00bd6",
+      "license": "cc-by-nc-4.0"
+    },
+    {
+      "profile": "trainer-semantic",
+      "repo": "m-a-p/MERT-v2-FullSong",
+      "revision": "d8ba1c745e733b3908ce6ad16ebeb17ac7600a42",
+      "file": "model.safetensors",
+      "destination": "checkpoints/MERT-v2-FullSong/model.safetensors",
+      "url": "https://huggingface.co/m-a-p/MERT-v2-FullSong/resolve/d8ba1c745e733b3908ce6ad16ebeb17ac7600a42/model.safetensors",
+      "size": 2529812848,
+      "sha256": "e6dd2ab187d6dd62b6521cd7d8f932e237acf0c5757745a7232082e28391350d",
+      "license": "cc-by-nc-4.0"
+    },
+    {
+      "profile": "trainer-semantic",
+      "repo": "m-a-p/MERT-v2-FullSong",
+      "revision": "d8ba1c745e733b3908ce6ad16ebeb17ac7600a42",
+      "file": "modeling_mert2.py",
+      "destination": "checkpoints/MERT-v2-FullSong/modeling_mert2.py",
+      "url": "https://huggingface.co/m-a-p/MERT-v2-FullSong/resolve/d8ba1c745e733b3908ce6ad16ebeb17ac7600a42/modeling_mert2.py",
+      "size": 17081,
+      "sha256": "b1a3174e5649c4b26b0c90d8626f0adacfbbba111a58ed3bb72ad651945a2f5c",
+      "license": "cc-by-nc-4.0"
+    },
+    {
+      "profile": "trainer-semantic",
+      "repo": "m-a-p/MERT-v2-FullSong",
+      "revision": "d8ba1c745e733b3908ce6ad16ebeb17ac7600a42",
+      "file": "preprocessor_config.json",
+      "destination": "checkpoints/MERT-v2-FullSong/preprocessor_config.json",
+      "url": "https://huggingface.co/m-a-p/MERT-v2-FullSong/resolve/d8ba1c745e733b3908ce6ad16ebeb17ac7600a42/preprocessor_config.json",
+      "size": 215,
+      "sha256": "fc7337f113b71062b8efd03f8a43a07aa769ce85c6a53fdc0b3bb90c299fe63f",
+      "license": "cc-by-nc-4.0"
+    },
+    {
+      "profile": "trainer-semantic",
+      "repo": "m-a-p/MERT-v2-FullSong",
+      "revision": "d8ba1c745e733b3908ce6ad16ebeb17ac7600a42",
+      "file": "weights_manifest.json",
+      "destination": "checkpoints/MERT-v2-FullSong/weights_manifest.json",
+      "url": "https://huggingface.co/m-a-p/MERT-v2-FullSong/resolve/d8ba1c745e733b3908ce6ad16ebeb17ac7600a42/weights_manifest.json",
+      "size": 241,
+      "sha256": "413e2ddfa71ae5bb364bfd15364e221249111e14c2f0843ea6162afb776a8300",
+      "license": "cc-by-nc-4.0"
+    },
+    {
+      "profile": "trainer-semantic",
+      "repo": "Mothersuperior/yue2-mothersuperior-realaudio-tokenizer-v4",
+      "revision": "e2e63d859f3af879baf1b4d4e9f22d1eeda6fde5",
+      "file": "tokenizer_head_joint_v4.pt",
+      "destination": "checkpoints/yue2-mothersuperior-realaudio-tokenizer-v4/tokenizer_head_joint_v4.pt",
+      "url": "https://huggingface.co/Mothersuperior/yue2-mothersuperior-realaudio-tokenizer-v4/resolve/e2e63d859f3af879baf1b4d4e9f22d1eeda6fde5/tokenizer_head_joint_v4.pt",
+      "size": 171305291,
+      "sha256": "d23c4f757a05f031134b8471ec84245ec2338966516e1a9e26a17ff300a5f87e",
+      "license": "cc-by-nc-4.0"
+    }
+  ],
+  "code": [
+    {
+      "component": "UniverSR",
+      "source": "https://github.com/woongzip1/UniverSR",
+      "commit": "d8636623fe0c0704296239c1d3d3c5b911ecb2e0",
+      "license": "MIT",
+      "status": "not installed or executed"
+    },
+    {
+      "component": "llama.cpp",
+      "source": "https://github.com/ggml-org/llama.cpp",
+      "candidateRelease": "v0.6.0",
+      "candidateCommit": "8345f333951c661d166b00e6f9362e553768f292",
+      "targets": [
+        "llama-mtmd-cli",
+        "llama-server"
+      ],
+      "license": "MIT",
+      "status": "shared pinned source3687 Git blobs verified; CPU Writer and one-job native CUDA Listener built; local10s Listener SAPI audio execution verified, only coarse speech-vs-music quality passed",
+      "verifiedGitTree": "88538af4019aa9d18026ff43e446c34fb7456adf",
+      "generatedSubtreeExcluded": "vendor/llama.cpp/build",
+      "sourceProof": "vendor/llama.cpp/source-pin.json"
+    }
+  ]
+}

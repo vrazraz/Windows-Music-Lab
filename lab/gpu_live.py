@@ -9,6 +9,7 @@ import collections
 import subprocess
 import threading
 import time
+import platform_runtime as runtime
 
 KEEP = 120                       # samples a card keeps: two minutes at one a second
 IDLE = 60                        # seconds without a look before the sampler stops
@@ -29,8 +30,8 @@ def _num(s):
 
 def _run():
     try:
-        p = subprocess.Popen(["nvidia-smi", "--query-gpu=" + QUERY, "--format=csv,noheader,nounits", "-lms", "1000"],
-                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, bufsize=1)
+        p = subprocess.Popen([runtime.nvidia_smi(), "--query-gpu=" + QUERY, "--format=csv,noheader,nounits", "-lms", "1000"],
+                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace", bufsize=1, **runtime.process_options())
     except OSError as e:
         STATE.update(running=False, error=f"no nvidia-smi here ({e})")
         return
@@ -52,8 +53,7 @@ def _run():
                 break                                   # nobody looks any more
     finally:
         try:
-            p.terminate()
-            p.wait(timeout=5)
+            runtime.terminate_process(p)
         except (OSError, subprocess.SubprocessError):
             pass
         STATE["running"] = False

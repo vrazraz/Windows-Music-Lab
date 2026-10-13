@@ -19,37 +19,27 @@ A failure to read the cards is said, never taken for "every card free".
     python3 lab/gpu_guard.py --pick N [MB]  the card to use, N first if it passes and has MB free (start.sh)"""
 import json, os, subprocess, sys
 from pathlib import Path
+import platform_runtime as runtime
 
 HEAVY_MB = 2048                                     # a stranger above this is a service, not the desktop
 KIT = Path(__file__).resolve().parent.parent
 
 
-def _ours(pid, root):
-    root = str(root)
-    try:
-        exe = os.path.realpath(f"/proc/{pid}/exe")
-        cmd = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").decode("utf-8", "replace")
-    except OSError:
-        return False                                   # gone, or not ours to read: not counted as ours
-    return exe.startswith(root) or root in cmd
+def _ours(pid, root, info=None):
+    return runtime.process_in_root(info or runtime.process_details([pid]).get(pid, {}), root)
 
 
-def _name(pid):
-    try:
-        cmd = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")
-        words = [c.decode("utf-8", "replace") for c in cmd if c]
-        for w in words:
-            if "vllm" in w.lower():
-                return "vLLM"
-        return os.path.basename(words[0]) if words else "?"
-    except OSError:
-        return "?"
+def _name(pid, info=None):
+    info = info or runtime.process_details([pid]).get(pid, {})
+    if "vllm" in info.get("cmd", "").lower():
+        return "vLLM"
+    return info.get("name") or os.path.basename(info.get("exe", "")) or "?"
 
 
 def _limits(root):
     """HERESY 1294: {index: MiB} from user/gpus.json; none when it has none."""
     try:
-        got = json.load(open(Path(root) / "user" / "gpus.json", encoding="utf-8")).get("limits") or {}
+        got = json.loads((Path(root) / "user" / "gpus.json").read_text(encoding="utf-8")).get("limits") or {}
         return {int(k): int(v) for k, v in got.items()}
     except (OSError, ValueError, TypeError, AttributeError):
         return {}
@@ -57,35 +47,49 @@ def _limits(root):
 
 def snapshot(root=KIT):
     """[{index, total_mb, free_mb, limit_mb, room_mb, share, foreign: [(pid, name, mb)], ok, why}] for every card."""
-    q = subprocess.run(["nvidia-smi", "--query-gpu=index,uuid,memory.total,memory.free", "--format=csv,noheader,nounits"],
+    q = runtime.run_process([runtime.nvidia_smi(), "--query-gpu=index,uuid,memory.total,memory.free", "--format=csv,noheader,nounits"],
                        capture_output=True, text=True, timeout=20)
-    a = subprocess.run(["nvidia-smi", "--query-compute-apps=pid,gpu_uuid,used_memory", "--format=csv,noheader,nounits"],
+    a = runtime.run_process([runtime.nvidia_smi(), "--query-compute-apps=pid,gpu_uuid,used_memory", "--format=csv,noheader,nounits"],
                        capture_output=True, text=True, timeout=20)
     if q.returncode != 0 or not q.stdout.strip():
         raise RuntimeError("nvidia-smi did not answer: " + (q.stderr.strip() or "no cards listed"))
+    if a.returncode != 0:
+        raise RuntimeError("nvidia-smi process accounting unavailable: " + (a.stderr.strip() or "query failed"))
     apps = {}
     for line in a.stdout.strip().splitlines():
         parts = [p.strip() for p in line.split(",")]
         if len(parts) == 3 and parts[0].isdigit():
-            apps.setdefault(parts[1], []).append((int(parts[0]), int(parts[2]) if parts[2].isdigit() else 0))
+            apps.setdefault(parts[1], []).append((int(parts[0]), int(parts[2]) if parts[2].isdigit() else None))
+    details = runtime.process_details([pid for rows in apps.values() for pid, _ in rows])
+    policy = os.environ.get("RUACH_WDDM_MEMORY_POLICY", "strict")
+    if policy not in ("strict", "aggregate"):
+        raise ValueError("RUACH_WDDM_MEMORY_POLICY must be strict or aggregate")
     cards, limits = [], _limits(root)
     for line in q.stdout.strip().splitlines():
         i, uuid, total, free = [p.strip() for p in line.split(",")]
         total, free = int(total), int(free)
-        foreign = [(pid, _name(pid), mb) for pid, mb in apps.get(uuid, []) if not _ours(pid, root)]
-        heavy = [f for f in foreign if f[2] > HEAVY_MB]
+        foreign = [(pid, _name(pid, details.get(pid)), mb) for pid, mb in apps.get(uuid, []) if not _ours(pid, root, details.get(pid))]
+        heavy = [f for f in foreign if f[2] is not None and f[2] > HEAVY_MB]
+        unknown = [f for f in foreign if f[2] is None]
         share = free / total if total else 0.0
         why = ("a service on it: " + ", ".join(f"{n} (pid {p}, {mb} MiB)" for p, n, mb in heavy)) if heavy else ""
+        warning = ""
+        if unknown:
+            warning = "GPU process memory is unavailable (WDDM/protected process); using " + policy + " policy"
+            if policy == "strict":
+                why = warning + ": " + ", ".join(f"{n} (pid {p})" for p, n, _ in unknown)
         lim = limits.get(int(i))
         lim = lim if lim and lim < total else None
         room = max(0, free - (total - lim)) if lim else free     # what the studio's work may still take under the card's limit
-        cards.append({"index": int(i), "total_mb": total, "free_mb": free, "limit_mb": lim, "room_mb": room, "share": round(share, 3),
+        reserve = SPARE_MB if unknown and policy == "aggregate" else 0
+        room = max(0, room - reserve)
+        cards.append({"accounting": "aggregate_only" if unknown else "per_process", "policy": policy, "reserve_mb": reserve, "warning": warning, "index": int(i), "total_mb": total, "free_mb": free, "limit_mb": lim, "room_mb": room, "share": round(share, 3),
                       "foreign": foreign, "ok": not why, "why": why})
     return cards
 
 
 def verdict(cards):
-    return "; ".join(f"GPU{c['index']}: " + (c["why"] or f"free, {c['free_mb']} MiB") for c in cards)
+    return "; ".join(f"GPU{c['index']}: " + (c["why"] or f"free, {c['free_mb']} MiB") + ("; " + c["warning"] if c.get("warning") and not c.get("why") else "") for c in cards)
 
 
 def check(card, need_mb=0, root=KIT):
@@ -132,7 +136,7 @@ if __name__ == "__main__":
             print(verdict(cards), file=sys.stderr)
         else:
             for c in snapshot():
-                small = [f for f in c["foreign"] if f[2] <= HEAVY_MB]
+                small = [f for f in c["foreign"] if f[2] is not None and f[2] <= HEAVY_MB]
                 print(f"GPU{c['index']}  {c['free_mb']:6d} of {c['total_mb']} MiB free ({c['share']:.0%})" + (f", {c['room_mb']} under its limit of {c['limit_mb']}" if c.get("limit_mb") else "") +
                       "  " + ("ok" if c["ok"] else "NO: " + c["why"])
                       + (f"  · the desktop's own: {len(small)} small" if small else ""))

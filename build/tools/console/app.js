@@ -4039,7 +4039,7 @@
   // it: the backbone (BF16 only where the card does BF16 in tensor cores and Auto gives it; else Q8_0, or the nearest one that is
   // here), Auto's context and VAE tiles for the studio card's memory or limit, the painter that fits; one window, once per install
   var MACHINE_KEY = "yue2.machineScan", BACKBONES = ["BF16", "Q8_0", "Q6_K", "Q5_K_M"];
-  var PAINTERS = { "krea2-q4": "Krea 2 Muse Q4 (12.6 GB at its peak)", "krea2-q8": "Krea 2 Muse Q8 (17.4 GB at its peak)", sdxl: "SDXL CyberRealistic (14.2 GB at its peak)" };
+  var PAINTERS = { "krea2-q4": "Krea 2 Muse Q4 (12.6 GB at its peak)", "krea2-q8": "Krea 2 Muse Q8 (17.4 GB at its peak)" };
   function machinePlan(m) {
     var have = (STATE.settings && STATE.settings.models) || [], list = m.cards || [];
     var card = list.filter(function (c) { return c.index === m.studio; })[0] || list[0];
@@ -5380,7 +5380,7 @@
   // HERESY 1106: the take in the player: the style's first words under the title, a tile of its own colour for a cover
   // (until covers are drawn for takes); one hue from the name, so a take keeps its tile
   // HERESY 1120: artwork for takes (Viktor: «просто иконка в плеере, в карточке и в mp3 файле»). The lab draws it: a
-  // prompt from the take's style and words (Qwen3-4B), the picture (an SDXL finetune). Asked for, never on its own.
+  // prompt from the take's style and words (Qwen3-4B), the picture (a supported local Krea/Qwen painter). Asked for, never on its own.
   STATE.arts = {};
   STATE.artsUnseen = {};            // HERESY 1156: pictures whose named subject the critic did not find: guesses
   STATE.artsCredit = {};            // HERESY 1166: pictures someone made (a photograph from Commons): name -> {text, url}
@@ -5511,6 +5511,7 @@
     var sel = $("artPainter");
     if (!sel) return;
     sel.value = recall("yue2.artPainter") || "";
+    if (sel.selectedIndex < 0) sel.value = "";
     sel.addEventListener("change", function () {
       store("yue2.artPainter", this.value || null);
       toast(this.value ? "Artwork from now on: " + this.options[this.selectedIndex].textContent : "Artwork: the painter by the cards");
@@ -5521,8 +5522,13 @@
     function qwenRows(list) {
       var have = {};
       Array.prototype.forEach.call(sel.options, function (o) { have[o.value] = 1; });
+      Array.prototype.forEach.call(sel.options, function (o) {
+        if (!o.value) return;
+        var p = (list || []).filter(function (p) { return p.key === o.value.split(":")[0]; })[0];
+        o.disabled = !p || !p.ready || p.viable === false;
+      });
       (list || []).forEach(function (p) {
-        if (!/^qwen/.test(p.key) || !p.ready) return;
+        if (!/^qwen/.test(p.key) || !p.ready || p.viable === false) return;
         var tail = (p.key === "qwen21" ? " · not for a song that is sold" : p.lightning ? " · Lightning" : " · without Lightning (its file is not here): slow") +
           " · about " + Math.round((+p.need_mb || 0) / 1024) + " GB · " + SPEED[p.key];
         var rows = p.key === "qwen2512-fp8" ? (p.models || []).map(function (m) { return [p.key + ":" + m, "Qwen-Image 2512 · " + m.replace(/\.safetensors$/, "") + tail]; })
@@ -5535,11 +5541,14 @@
           sel.appendChild(o);
         });
       });
-      var want = recall("yue2.artPainter") || "";      // a Qwen painter chosen before: its line is here now
-      if (want && sel.value !== want && Array.prototype.some.call(sel.options, function (o) { return o.value === want; })) sel.value = want;
+      var usable = (list || []).some(function (p) { return p.ready && p.viable !== false; });
+      sel.options[0].textContent = tr(usable ? "By the cards: available local Krea/Qwen painter" : "No available local painter — Artist tools remain available");
+      var want = recall("yue2.artPainter") || "";      // a supported painter chosen before
+      if (want && sel.value !== want && Array.prototype.some.call(sel.options, function (o) { return o.value === want && !o.disabled; })) sel.value = want;
+      if (sel.selectedIndex < 0 || sel.options[sel.selectedIndex].disabled) sel.value = "";
     }
     window.ruachArtPainters = function (list) { qwenRows(list); return Array.prototype.map.call(sel.options, function (o) { return [o.value, o.textContent]; }); };   // for the checks
-    api("/lab/artist/painters").then(function (d) { qwenRows(d && d.painters); }).catch(function () { /* the lab later: Krea and SDXL stand */ });
+    api("/lab/artist/painters").then(function (d) { qwenRows(d && d.painters); }).catch(function () { /* metadata unavailable: do not claim painter readiness */ });
   })();
   function drawArt(name, again, quiet) {
     var take = findTake(name), title = take ? displayTitle(take) : name;

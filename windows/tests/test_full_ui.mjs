@@ -1,0 +1,31 @@
+import {readFileSync} from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+const root = process.argv[2];
+const html=readFileSync(root+'/windows/cache/full-ui/index.html','utf8');
+let scripts=0;
+for(const block of html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)){
+  new vm.Script(block[1],{filename:'inline-'+(++scripts)+'.js'});
+}
+assert(scripts>30,'full modules must be bundled');
+assert(!/<script[^>]+src=/.test(html),'no external scripts');
+assert(!/RUACH_LOGO_WORDS\s*=/.test(html),'upstream logo drawing is excluded');
+assert(/aria-label="Windows Music Lab"/.test(html));
+assert(/Content-Security-Policy/.test(html));
+const guard=readFileSync(root+'/windows/full-local-mode.js','utf8');
+let allowed=[];
+const context={URL,location:{href:'http://localhost:41868/',origin:'http://localhost:41868'},XMLHttpRequest:class{},document:{addEventListener(){}},window:{fetch:async(value)=>{allowed.push(String(value));return {ok:true}}}};
+context.XMLHttpRequest.prototype.open=function(method,url){allowed.push(url)};
+vm.createContext(context);
+vm.runInContext(guard,context);
+await context.window.fetch('/lab/health');
+await context.window.fetch('http://127.0.0.1:12345/v1/chat/completions');
+await assert.rejects(context.window.fetch('https://openrouter.ai/api/v1/chat/completions'),/local mode/);
+await assert.rejects(context.window.fetch(new URL('https://example.com/private')),/local mode/);
+await assert.rejects(context.window.fetch('http://localhost.example.com/private'),/local mode/);
+await assert.rejects(context.window.fetch('http://user:secret@127.0.0.1/private'),/local mode/);
+const xhr=new context.XMLHttpRequest();
+xhr.open('POST','/lab/import');
+assert.throws(()=>xhr.open('POST','https://example.com/upload'),/local mode/);
+assert.equal(allowed.length,3);
+console.log(JSON.stringify({passed:true,parsedInlineScripts:scripts,blockedExternalFetchAndUploads:true,originalLogoExcluded:true}));

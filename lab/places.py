@@ -24,6 +24,7 @@ import threading
 import time
 import urllib.request
 from pathlib import Path
+import platform_runtime as runtime
 
 PLACES = (("outputs", "Songs", "the takes, and the workspaces fetched from Hugging Face"),
           ("trash", "Trash", "what was deleted, until the trash is emptied"),
@@ -43,6 +44,8 @@ def setup(kit, busy, settings_lock, settings_file, studio_port="41867", say=prin
 
 
 def _wsl():
+    if runtime.WINDOWS:
+        return False
     try:
         return "microsoft" in Path("/proc/version").read_text(encoding="utf-8", errors="replace").lower()
     except OSError:
@@ -50,19 +53,31 @@ def _wsl():
 
 
 def norm(raw):
-    """A folder as typed: quotes and spaces off, ~ and $VARS expanded; under WSL a Windows path is its drive's /mnt/x. Absolute only."""
+    """Absolute native local path; WSL conversion remains available only on WSL."""
     s = str(raw or "").strip().strip('"').strip("'").strip()
     if not s:
         return ""
+    s = os.path.expandvars(os.path.expanduser(s))
+    if runtime.WINDOWS:
+        if s.startswith("\\\\") or not re.match(r"^[A-Za-z]:[\\/]", s):
+            raise ValueError("a full local drive path, for example D:\\Music; network shares are disabled")
+        return os.path.normpath(s)
     m = re.match(r"^([A-Za-z]):(?:[\\/](.*))?$", s)
     if m:
         if not _wsl():
-            raise ValueError(f"{s} is a Windows path: it means something only under WSL (D:\\ is /mnt/d there)")
+            raise ValueError(f"{s} is a Windows path; use an absolute native path")
         s = "/mnt/" + m.group(1).lower() + "/" + (m.group(2) or "").replace("\\", "/")
-    s = os.path.expandvars(os.path.expanduser(s))
     if not s.startswith("/"):
         raise ValueError("a full path, from / (or ~ for your home)")
     return os.path.normpath(s)
+
+
+def _inside(child, parent):
+    try:
+        child, parent = os.path.normcase(os.path.realpath(child)), os.path.normcase(os.path.realpath(parent))
+        return os.path.commonpath([child, parent]) == parent
+    except ValueError:                       # different Windows drives
+        return False
 
 
 def _walk(top):
@@ -78,11 +93,11 @@ def _walk(top):
         with it:
             for e in it:
                 try:
-                    if e.is_dir(follow_symlinks=False):
+                    if e.is_dir(follow_symlinks=False) and not runtime.is_directory_link(e.path):
                         stack.append(e.path)
                     else:
                         files += 1
-                        if not e.is_symlink():
+                        if not runtime.is_directory_link(e.path):
                             size += e.stat(follow_symlinks=False).st_size
                 except OSError:
                     pass
@@ -106,7 +121,7 @@ def _count_soon(name, real):
 def _settings():
     p = H["settings_file"]
     try:
-        return json.load(open(p, encoding="utf-8"))
+        return json.loads(p.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {"saved_at": 0, "keys": {}}
 
@@ -137,7 +152,7 @@ def listing(refresh=False):
     rows = []
     for name, label, what in PLACES:
         p = kit / name
-        link = p.is_symlink()
+        link = runtime.is_directory_link(p)
         real = os.path.realpath(p)
         here = os.path.isdir(real)
         row = {"name": name, "label": label, "what": what, "path": str(p), "real": real, "linked": link, "here": here,
@@ -150,7 +165,7 @@ def listing(refresh=False):
         if link and not here:
             row["missing"] = True                    # a link to a folder that is not there: a disk not mounted?
         at = (rec.get(name) or {}).get("at") or ""
-        if at and not link and at != real:
+        if at and not link and os.path.normcase(at) != os.path.normcase(real):
             row["elsewhere"] = at                    # the record says it lives at `at`, the studio's folder holds a folder of its own
         size = SIZES.get(name)
         if here and (refresh or not size or size["real"] != real or time.time() - size["at"] > 600):
@@ -194,7 +209,7 @@ def plan(name, to):
     if not os.path.isdir(real):
         return {"ok": False, "why": f"{name} is not there now ({real}): link it back, or mount its disk, first"}
     if home:
-        if not p.is_symlink():
+        if not runtime.is_directory_link(p):
             return {"ok": False, "why": f"{name} is in the studio's folder already"}
         dest, parent = str(p), str(kit)
     else:
@@ -207,11 +222,11 @@ def plan(name, to):
         rp = os.path.realpath(dest)
         if rp == real:
             return {"ok": False, "why": f"{name} is there already", "dest": dest}
-        if (rp + "/").startswith(real + "/"):
+        if _inside(rp, real):
             return {"ok": False, "why": f"{dest} is inside {name} itself", "dest": dest}
-        if (os.path.realpath(parent) + "/").startswith(str(kit) + "/"):
+        if _inside(parent, kit):
             return {"ok": False, "why": "inside the studio's folder: a folder there needs no link", "dest": dest}
-        if os.path.lexists(dest) and not (os.path.isdir(dest) and not os.path.islink(dest) and not os.listdir(dest)):
+        if os.path.lexists(dest) and not (os.path.isdir(dest) and not runtime.is_directory_link(dest) and not os.listdir(dest)):
             return {"ok": False, "why": f"{dest} is there already: choose another folder, or empty it", "dest": dest}
     same = os.stat(real).st_dev == os.stat(parent).st_dev
     size = SIZES.get(name)
@@ -256,8 +271,8 @@ def _copy_tree(src, dst):
         to = dst if rel == "." else os.path.join(dst, rel)
         for d in list(dirs):
             s = os.path.join(root, d)
-            if os.path.islink(s):
-                os.symlink(os.readlink(s), os.path.join(to, d))
+            if runtime.is_directory_link(s):
+                runtime.copy_directory_link(s, os.path.join(to, d), src, dst)
                 dirs.remove(d)
                 _set(files=JOB["files"] + 1)
             else:
@@ -280,10 +295,10 @@ def _catch_up(src, dst):
         to = dst if rel == "." else os.path.join(dst, rel)
         os.makedirs(to, exist_ok=True)
         for d in list(dirs):
-            if os.path.islink(os.path.join(root, d)):
+            if runtime.is_directory_link(os.path.join(root, d)):
                 dirs.remove(d)
                 if not os.path.lexists(os.path.join(to, d)):
-                    os.symlink(os.readlink(os.path.join(root, d)), os.path.join(to, d))
+                    runtime.copy_directory_link(os.path.join(root, d), os.path.join(to, d), src, dst)
                     n += 1
         for f in files:
             s, t = os.path.join(root, f), os.path.join(to, f)
@@ -337,23 +352,19 @@ def _run(name, dest, home, same):
                 raise RuntimeError(f"the copy differs: {a[0]} files, {a[1]} bytes there, {c[0]}, {c[1]} in the copy; nothing was switched")
         _set(phase="switch")
         if home:
-            os.unlink(p)                             # the link only: the folder it named stays
+            runtime.remove_directory_link(p)                             # the link only: the folder it named stays
             os.rename(built, p)
         else:
-            if os.path.isdir(dest) and not os.path.islink(dest):
+            if os.path.isdir(dest) and not runtime.is_directory_link(dest):
                 os.rmdir(dest)                       # an empty folder of that name, checked empty by plan()
             os.rename(built, dest)
-            if p.is_symlink():
-                tmp = kit / ("." + name + ".link")
-                if os.path.lexists(tmp):
-                    os.unlink(tmp)
-                os.symlink(dest, tmp)
-                os.replace(tmp, p)                   # the link points elsewhere in one step
+            if runtime.is_directory_link(p):
+                runtime.replace_directory_link(dest, p)                   # the link points elsewhere in one step
             else:
                 if os.path.lexists(p):               # the folder of the studio's own, full (a copy) or gone (a rename)
                     old = gone = str(p) + ".moved-" + stamp
                     os.rename(p, old)
-                os.symlink(dest, p)
+                runtime.create_directory_link(dest, p)
                 gone = ""
         if not same and os.path.isdir(real) and os.path.realpath(p) != real and not old:
             old = real + ".moved-" + stamp           # the old copy elsewhere: renamed, kept
@@ -368,7 +379,7 @@ def _run(name, dest, home, same):
                 os.rename(gone, p)                   # the switch half done: the studio's own folder back under its name
             if same and not os.path.lexists(real) and os.path.lexists(built):
                 os.rename(built, real)               # a rename half done goes back
-            elif made and os.path.isdir(built) and not os.path.islink(built):
+            elif made and os.path.isdir(built) and not runtime.is_directory_link(built):
                 shutil.rmtree(built)                 # a copy left unfinished: this run's own, the folder itself untouched
         except OSError:
             pass
@@ -389,18 +400,14 @@ def relink(data, scope=""):
         raise ValueError(f"no record of where {name} lives")
     if not os.path.isdir(at):
         raise ValueError(f"{at} is not there (a disk not mounted?)")
-    if p.is_symlink():
-        tmp = H["kit"] / ("." + name + ".link")
-        if os.path.lexists(tmp):
-            os.unlink(tmp)
-        os.symlink(at, tmp)
-        os.replace(tmp, p)
+    if runtime.is_directory_link(p):
+        runtime.replace_directory_link(at, p)
     else:
         if p.is_dir():
             if any(p.iterdir()):
                 raise ValueError(f"{p} holds files of its own: both places hold some; move or merge them by hand first")
             p.rmdir()
-        os.symlink(at, p)
+        runtime.create_directory_link(at, p)
     return listing()
 
 
@@ -412,13 +419,13 @@ def boot():
         p = H["kit"] / name
         at = (rec.get(name) or {}).get("at") or ""
         try:
-            if at and not p.is_symlink() and os.path.isdir(at) and (not p.exists() or (p.is_dir() and not any(p.iterdir()))):
+            if at and not runtime.is_directory_link(p) and os.path.isdir(at) and (not p.exists() or (p.is_dir() and not any(p.iterdir()))):
                 if p.is_dir():
                     p.rmdir()
-                os.symlink(at, p)
+                runtime.create_directory_link(at, p)
                 H["say"](f"[places] {name} linked back to {at}, as user/settings.json keeps it")
-            elif p.is_symlink() and not p.exists():
-                H["say"](f"[places] ⚠ {name} is a link to {os.readlink(p)}, which is not there (a disk not mounted?)")
+            elif runtime.is_directory_link(p) and not p.exists():
+                H["say"](f"[places] ⚠ {name} is a link to {os.path.realpath(p)}, which is not there (a disk not mounted?)")
             elif not os.path.lexists(p):
                 p.mkdir()
         except OSError as e:

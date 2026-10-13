@@ -1,0 +1,240 @@
+{
+  "python": "3.10",
+  "packages": [
+    {
+      "package": "diffusers",
+      "version": "0.41.0",
+      "python": ">=3.10.0",
+      "license": "Apache 2.0 License",
+      "wheels": [
+        {
+          "filename": "diffusers-0.41.0-py3-none-any.whl",
+          "size": 6063887,
+          "sha256": "ea8918b7dfd92ce793b6db689a551b8cd25d52c6c0fcd3ade0706a5fd2a25990",
+          "url": "https://files.pythonhosted.org/packages/fe/c4/5bf8afd1ff3a8d99da7a18b1067ae0b4e2a037c38f3851890a989c511fd3/diffusers-0.41.0-py3-none-any.whl"
+        }
+      ],
+      "deps": [
+        "importlib_metadata",
+        "filelock",
+        "huggingface-hub<2.0,>=1.32.0",
+        "numpy",
+        "regex!=2019.12.17",
+        "requests",
+        "safetensors>=0.8.0",
+        "Pillow"
+      ]
+    },
+    {
+      "package": "transformers",
+      "version": "5.19.0",
+      "python": ">=3.10.0",
+      "license": "Apache 2.0 License",
+      "wheels": [
+        {
+          "filename": "transformers-5.19.0-py3-none-any.whl",
+          "size": 12599123,
+          "sha256": "afcd2dd5f603ed28c1e1fcb00a338ccbb4ef5f878ed289635df8b58187afb518",
+          "url": "https://files.pythonhosted.org/packages/b9/59/1e7f1212c215c73690ae6cab4678efe1555ff985953e145d88cc212859b0/transformers-5.19.0-py3-none-any.whl"
+        }
+      ],
+      "deps": [
+        "huggingface-hub<3.0,>=1.31.0",
+        "numpy>=1.17",
+        "packaging>=20.0",
+        "pyyaml>=5.1",
+        "regex>=2025.10.22",
+        "tokenizers<0.24.0,>=0.23.1",
+        "typer",
+        "safetensors>=0.8.0",
+        "tqdm>=4.60"
+      ]
+    },
+    {
+      "package": "accelerate",
+      "version": "1.15.0",
+      "python": ">=3.10.0",
+      "license": "Apache",
+      "wheels": [
+        {
+          "filename": "accelerate-1.15.0-py3-none-any.whl",
+          "size": 394295,
+          "sha256": "97eacca0b73e45cb867dbf8c5d5d4dc32219544300e0c8992c7334dc2ef33cec",
+          "url": "https://files.pythonhosted.org/packages/8a/4c/34f0450479d01195027260da68d8a3880683f1640c3ca5adf64acb3185f1/accelerate-1.15.0-py3-none-any.whl"
+        }
+      ],
+      "deps": [
+        "numpy>=1.17",
+        "packaging>=20.0",
+        "psutil",
+        "pyyaml",
+        "torch>=2.0.0",
+        "huggingface_hub>=0.21.0",
+        "safetensors>=0.4.3"
+      ]
+    },
+    {
+      "package": "peft",
+      "version": "0.21.2",
+      "python": ">=3.10.0",
+      "license": "Apache",
+      "wheels": [
+        {
+          "filename": "peft-0.21.2-py3-none-any.whl",
+          "size": 835427,
+          "sha256": "106ab6077ff72c54d21577f9af5970e34bac7582cb14209f7b2b511e322a4eae",
+          "url": "https://files.pythonhosted.org/packages/70/0b/59441cdbfdd342ed03c08af90a2fe16173f0cd48ab219f523b39ca059a79/peft-0.21.2-py3-none-any.whl"
+        }
+      ],
+      "deps": [
+        "numpy>=1.17",
+        "packaging>=20.0",
+        "psutil",
+        "pyyaml",
+        "torch>=1.13.0",
+        "transformers",
+        "tqdm",
+        "accelerate>=0.21.0",
+        "safetensors",
+        "huggingface_hub>=0.25.0"
+      ]
+    },
+    {
+      "package": "numpy",
+      "version": "2.2.6",
+      "python": ">=3.10",
+      "license": "BSD-3-Clause",
+      "wheels": [
+        {
+          "filename": "numpy-2.2.6-cp310-cp310-win_amd64.whl",
+          "size": 12904620,
+          "sha256": "f0fd6321b839904e15c46e0d257fdd101dd7f530fe03fd6359c1ea63738703f3",
+          "url": "https://files.pythonhosted.org/packages/a3/dd/4b822569d6b96c39d1215dbae0582fd99954dcbcf0c1a13c61783feaca3f/numpy-2.2.6-cp310-cp310-win_amd64.whl"
+        }
+      ],
+      "deps": [],
+      "licenseMetadata": "Copyright (c) 2005-2024, NumPy Developers.\n         All rights reserved.\n         \n  ",
+      "licenseUrl": "https://numpy.org/doc/stable/license.html"
+    },
+    {
+      "package": "pillow",
+      "version": "12.3.0",
+      "python": ">=3.10",
+      "license": "MIT-CMU",
+      "wheels": [
+        {
+          "filename": "pillow-12.3.0-cp310-cp310-win_amd64.whl",
+          "size": 7226887,
+          "sha256": "300557495eb45ebb8aec96c2da9c4be642fbf7cd937278b4013ba894ea8eb0eb",
+          "url": "https://files.pythonhosted.org/packages/48/7c/8fa0039574c476d7c6fa57dd7c32a130436877c6ec1e5ce1cc8ec44878c1/pillow-12.3.0-cp310-cp310-win_amd64.whl"
+        }
+      ],
+      "deps": []
+    },
+    {
+      "package": "scipy",
+      "version": "1.15.3",
+      "python": ">=3.10",
+      "license": "BSD-3-Clause; bundled dependencies retain their own notices",
+      "wheels": [
+        {
+          "filename": "scipy-1.15.3-cp310-cp310-win_amd64.whl",
+          "size": 41259201,
+          "sha256": "9d61e97b186a57350f6d6fd72640f9e99d5a4a2b8fbf4b9ee9a841eab327dc13",
+          "url": "https://files.pythonhosted.org/packages/d1/84/55bc4881973d3f79b479a5a2e2df61c8c9a04fcb986a213ac9c02cfb659b/scipy-1.15.3-cp310-cp310-win_amd64.whl"
+        }
+      ],
+      "deps": [
+        "numpy<2.5,>=1.23.5"
+      ],
+      "licenseMetadata": "Copyright (c) 2001-2002 Enthought, Inc. 2003-2024, SciPy Developers. All rights reser",
+      "licenseUrl": "https://github.com/scipy/scipy/blob/v1.15.3/LICENSE.txt"
+    },
+    {
+      "package": "spandrel",
+      "version": "0.4.2",
+      "python": ">=3.10",
+      "license": "MIT",
+      "wheels": [
+        {
+          "filename": "spandrel-0.4.2-py3-none-any.whl",
+          "size": 320811,
+          "sha256": "6c93e3ecbeb0e548fd2df45a605472b34c1614287c56b51bb33cdef7ae5235b5",
+          "url": "https://files.pythonhosted.org/packages/74/31/411ea965835534c43d4b98d451968354876e0e867ea1fd42669e4cca0732/spandrel-0.4.2-py3-none-any.whl"
+        }
+      ],
+      "deps": [
+        "torch",
+        "torchvision",
+        "safetensors",
+        "numpy",
+        "einops",
+        "typing_extensions"
+      ]
+    },
+    {
+      "package": "kernels",
+      "version": "0.17.2",
+      "python": ">=3.10",
+      "license": "Apache-2.0",
+      "wheels": [
+        {
+          "filename": "kernels-0.17.2-cp38-abi3-win_amd64.whl",
+          "size": 1632837,
+          "sha256": "4d886ddce44d16ff38681b312042bc6e8f04c632c332139ff4dbefe2ba4b52a8",
+          "url": "https://files.pythonhosted.org/packages/91/b8/913dfd8d8880d07ef17560641d762fc39d908fb360218c60023a9bfa78a5/kernels-0.17.2-cp38-abi3-win_amd64.whl"
+        }
+      ],
+      "deps": [
+        "huggingface-hub>=1.10.0",
+        "packaging>=20.0",
+        "pyyaml>=6",
+        "sigstore<5,>=4",
+        "tomli>=2.0; python_full_version < \"3.11\"",
+        "typing-extensions>=4.0; python_full_version < \"3.11\"",
+        "tomlkit>=0.13.3"
+      ]
+    },
+    {
+      "package": "safetensors",
+      "version": "0.8.0",
+      "python": ">=3.10",
+      "license": "Apache-2.0",
+      "wheels": [
+        {
+          "filename": "safetensors-0.8.0-cp310-abi3-win_amd64.whl",
+          "size": 355540,
+          "sha256": "096ec1a98435df7beb08853bb5aa9081a84f23d0adc67ed1a0a10550f608373f",
+          "url": "https://files.pythonhosted.org/packages/1b/6d/3fba214c1e5e0f69991677ec3bc17023f0421776975e1de0c682dca475e2/safetensors-0.8.0-cp310-abi3-win_amd64.whl"
+        }
+      ],
+      "deps": [],
+      "licenseMetadata": "None",
+      "licenseUrl": "https://github.com/safetensors/safetensors/blob/main/LICENSE"
+    },
+    {
+      "package": "gguf",
+      "version": "0.19.0",
+      "python": ">=3.10",
+      "license": "MIT",
+      "wheels": [
+        {
+          "filename": "gguf-0.19.0-py3-none-any.whl",
+          "size": 118475,
+          "sha256": "70bcd10edfe697fb2dad6e40af2234b9d8ece9a41a99761405121ebda1c3c1cd",
+          "url": "https://files.pythonhosted.org/packages/b3/bb/d71d6da82763528c2c2ed6b59a9d6142c6595545a4c448e2085d155e88c2/gguf-0.19.0-py3-none-any.whl"
+        }
+      ],
+      "deps": [
+        "numpy>=1.17",
+        "pyyaml>=5.1",
+        "requests>=2.25",
+        "tqdm>=4.27"
+      ],
+      "licenseMetadata": "None",
+      "licenseUrl": "https://github.com/ggml-org/llama.cpp/blob/master/LICENSE"
+    }
+  ],
+  "metadataOnly": true,
+  "note": "Direct candidate wheels compatible with Python 3.10; transitive resolution, full installed lock and PyTorch transfer sizes remain unverified. No new code installed or executed."
+}

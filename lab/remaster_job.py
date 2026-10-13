@@ -13,10 +13,14 @@ SETTINGS: {"source": "" | "derived/stems-four" | "derived/stems-vocals" | "deriv
            "formats": ["wav", "flac"]}
 Prints one line of JSON: the files, the loudness in and out, the log.
 """
+from pathlib import Path as _RuntimePath
+from platform_runtime import configure_runtime as _configure_runtime
+_configure_runtime(_RuntimePath(__file__).resolve().parent.parent)
+
 import contextlib, io, json, os, shutil, sys, time
 from pathlib import Path
 
-take, outdir, cfg = Path(sys.argv[1]), Path(sys.argv[2]), json.load(open(sys.argv[3]))
+take, outdir, cfg = Path(sys.argv[1]), Path(sys.argv[2]), json.load(open(sys.argv[3], encoding="utf-8"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import debunker as db  # noqa: E402
 
@@ -43,7 +47,10 @@ elif src:
     shutil.rmtree(mixdir, ignore_errors=True)
     mixdir.mkdir()
     for x in use:
-        os.link(sd / f"{x}.flac", mixdir / f"{x}.flac")
+        try:
+            os.link(sd / f"{x}.flac", mixdir / f"{x}.flac")
+        except OSError:
+            shutil.copy2(sd / f"{x}.flac", mixdir / f"{x}.flac")
     stems = db.find_stems(str(mixdir))
     db.apply_preset(stems, cfg.get("preset", "balanced"))
     for s in stems:                                  # the page's own levels win over the preset
